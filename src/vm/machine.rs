@@ -47,6 +47,10 @@ impl Machine {
                     let value = self.read_const(index)?;
                     self.stack_push(value)?;
                 }
+                Instruction::Add => self.do_binary(|a, b| a + b)?,
+                Instruction::Subtract => self.do_binary(|a, b| a - b)?,
+                Instruction::Multiply => self.do_binary(|a, b| a * b)?,
+                Instruction::Divide => self.do_binary(|a, b| a / b)?,
                 Instruction::Negate => {
                     let value = self.stack_pop()?;
                     self.stack_push(-value)?;
@@ -59,6 +63,13 @@ impl Machine {
             }
         }
         Ok(())
+    }
+
+    fn do_binary(&mut self, operation: fn(Value, Value) -> Value) -> MachineResult<()> {
+        let b = self.stack_pop()?;
+        let a = self.stack_pop()?;
+        let val = operation(a, b);
+        self.stack_push(val)
     }
 
     fn read_const(&self, index: u8) -> MachineResult<Value> {

@@ -5,12 +5,20 @@ use std::fmt::Display;
 pub enum OpCode {
     Constant,
     Negate,
+    Add,
+    Subtract,
+    Multiply,
+    Divide,
     Return,
 }
 
 pub enum Instruction {
     Constant(u8),
     Negate,
+    Add,
+    Subtract,
+    Multiply,
+    Divide,
     Return,
 }
 
@@ -19,6 +27,10 @@ impl Display for Instruction {
         match self {
             Instruction::Constant(x) => write!(f, "const {x}"),
             Instruction::Negate => write!(f, "negate"),
+            Instruction::Add => write!(f, "add"),
+            Instruction::Subtract => write!(f, "subtract"),
+            Instruction::Multiply => write!(f, "multiply"),
+            Instruction::Divide => write!(f, "divide"),
             Instruction::Return => write!(f, "return"),
         }
     }
@@ -34,6 +46,12 @@ impl Instruction {
                 Some(Instruction::Constant(arg1))
             }
             x if x == OpCode::Negate as u8 => Some(Instruction::Negate),
+
+            x if x == OpCode::Add as u8 => Some(Instruction::Add),
+            x if x == OpCode::Subtract as u8 => Some(Instruction::Subtract),
+            x if x == OpCode::Multiply as u8 => Some(Instruction::Multiply),
+            x if x == OpCode::Divide as u8 => Some(Instruction::Divide),
+
             x if x == OpCode::Return as u8 => Some(Instruction::Return),
             _ => panic!("Unexpected opcode {byte}"),
         }
