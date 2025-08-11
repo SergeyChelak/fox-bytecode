@@ -31,6 +31,10 @@ impl Chunk {
         self.constants.len() - 1
     }
 
+    pub fn read_const(&self, idx: u8) -> Option<Value> {
+        self.constants.get(idx as usize).cloned()
+    }
+
     pub fn fetch(&mut self, offset: &mut usize) -> Option<Instruction> {
         Instruction::fetch(&self.code, offset)
     }
@@ -49,7 +53,7 @@ impl Chunk {
         output.join("\n")
     }
 
-    fn disassemble_instruction(&mut self, instr: &Instruction, offset: usize) -> String {
+    pub fn disassemble_instruction(&mut self, instr: &Instruction, offset: usize) -> String {
         let main = format!("{instr}");
         let value = match instr {
             Instruction::Constant(idx) => format!("{main}\t{}", self.constants[*idx as usize]),
