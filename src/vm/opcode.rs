@@ -4,11 +4,13 @@ use std::fmt::Display;
 #[derive(Clone, Copy)]
 pub enum OpCode {
     Constant,
+    Negate,
     Return,
 }
 
 pub enum Instruction {
     Constant(u8),
+    Negate,
     Return,
 }
 
@@ -16,12 +18,14 @@ impl Display for Instruction {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Instruction::Constant(x) => write!(f, "const {x}"),
+            Instruction::Negate => write!(f, "negate"),
             Instruction::Return => write!(f, "return"),
         }
     }
 }
 
 impl Instruction {
+    // TODO: refactor to return result <Ok, End | Broken | Unknown>
     pub fn fetch(buffer: &[u8], offset: &mut usize) -> Option<Self> {
         let byte = consume(buffer, offset)?;
         match byte {
@@ -29,8 +33,9 @@ impl Instruction {
                 let arg1 = consume(buffer, offset)?;
                 Some(Instruction::Constant(arg1))
             }
+            x if x == OpCode::Negate as u8 => Some(Instruction::Negate),
             x if x == OpCode::Return as u8 => Some(Instruction::Return),
-            _ => None,
+            _ => panic!("Unexpected opcode {byte}"),
         }
     }
 }

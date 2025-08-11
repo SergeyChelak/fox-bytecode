@@ -36,21 +36,25 @@ impl Machine {
     }
 
     pub fn run(&mut self) -> MachineResult<()> {
-        loop {
-            // let ip = self.ip;
+        'run_loop: loop {
+            let ip = self.ip;
             let Some(instr) = self.chunk.fetch(&mut self.ip) else {
-                return Err(MachineError::runtime("Invalid instruction"));
+                return Err(MachineError::runtime("Invalid instruction at {ip}"));
             };
-            // println!("{}", self.chunk.disassemble_instruction(&instr, ip));
+            println!("{}", self.chunk.disassemble_instruction(&instr, ip));
             match instr {
                 Instruction::Constant(index) => {
                     let value = self.read_const(index)?;
                     self.stack_push(value)?;
                 }
+                Instruction::Negate => {
+                    let value = self.stack_pop()?;
+                    self.stack_push(-value)?;
+                }
                 Instruction::Return => {
                     let value = self.stack_pop()?;
                     println!("{value}");
-                    break;
+                    break 'run_loop;
                 }
             }
         }
@@ -86,6 +90,7 @@ impl Machine {
     }
 
     fn stack_trace(&self) {
+        // 15 . 2 . 2 Stack tracing
         todo!()
     }
 }
