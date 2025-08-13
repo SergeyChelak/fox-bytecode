@@ -36,24 +36,43 @@ impl Display for Instruction {
     }
 }
 
+#[derive(Debug)]
+pub enum FetchError {
+    Unknown(u8),
+    Broken,
+    End,
+}
+
+impl Display for FetchError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            FetchError::Unknown(x) => write!(f, "Unknown instruction {x}"),
+            FetchError::Broken => write!(f, "Broken instruction"),
+            FetchError::End => write!(f, "End of program"),
+        }
+    }
+}
+
+pub type FetchResult<T> = Result<T, FetchError>;
+
 impl Instruction {
     // TODO: refactor to return result <Ok, End | Broken | Unknown>
-    pub fn fetch(buffer: &[u8], offset: &mut usize) -> Option<Self> {
-        let byte = consume(buffer, offset)?;
+    pub fn fetch(buffer: &[u8], offset: &mut usize) -> FetchResult<Self> {
+        let byte = consume(buffer, offset).ok_or(FetchError::End)?;
         match byte {
             x if x == OpCode::Constant as u8 => {
-                let arg1 = consume(buffer, offset)?;
-                Some(Instruction::Constant(arg1))
+                let arg1 = consume(buffer, offset).ok_or(FetchError::Broken)?;
+                Ok(Instruction::Constant(arg1))
             }
-            x if x == OpCode::Negate as u8 => Some(Instruction::Negate),
+            x if x == OpCode::Negate as u8 => Ok(Instruction::Negate),
 
-            x if x == OpCode::Add as u8 => Some(Instruction::Add),
-            x if x == OpCode::Subtract as u8 => Some(Instruction::Subtract),
-            x if x == OpCode::Multiply as u8 => Some(Instruction::Multiply),
-            x if x == OpCode::Divide as u8 => Some(Instruction::Divide),
+            x if x == OpCode::Add as u8 => Ok(Instruction::Add),
+            x if x == OpCode::Subtract as u8 => Ok(Instruction::Subtract),
+            x if x == OpCode::Multiply as u8 => Ok(Instruction::Multiply),
+            x if x == OpCode::Divide as u8 => Ok(Instruction::Divide),
 
-            x if x == OpCode::Return as u8 => Some(Instruction::Return),
-            _ => panic!("Unexpected opcode {byte}"),
+            x if x == OpCode::Return as u8 => Ok(Instruction::Return),
+            x => Err(FetchError::Unknown(x)),
         }
     }
 }
@@ -73,7 +92,7 @@ mod test {
         let buffer: [u8; 0] = [];
         let mut offset = 0;
         let instr = Instruction::fetch(&buffer, &mut offset);
-        assert!(instr.is_none());
+        assert!(instr.is_err());
     }
 
     #[test]
@@ -81,7 +100,7 @@ mod test {
         let buffer = [OpCode::Return as u8];
         let mut offset = 0;
         let instr = Instruction::fetch(&buffer, &mut offset);
-        assert!(instr.is_some());
+        assert!(instr.is_ok());
         assert_eq!(offset, 1);
         let instr = instr.unwrap();
         assert!(matches!(instr, Instruction::Return))
@@ -93,7 +112,7 @@ mod test {
         let buffer = [OpCode::Constant as u8, idx];
         let mut offset = 0;
         let instr = Instruction::fetch(&buffer, &mut offset);
-        assert!(instr.is_some());
+        assert!(instr.is_ok());
         assert_eq!(offset, 2);
         match instr.unwrap() {
             Instruction::Constant(x) => assert_eq!(x, idx),

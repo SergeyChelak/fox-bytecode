@@ -1,4 +1,4 @@
-use crate::vm::{Instruction, OpCode};
+use crate::vm::{FetchResult, Instruction, OpCode};
 
 pub type Value = f32;
 
@@ -35,7 +35,7 @@ impl Chunk {
         self.constants.get(idx as usize).cloned()
     }
 
-    pub fn fetch(&mut self, offset: &mut usize) -> Option<Instruction> {
+    pub fn fetch(&mut self, offset: &mut usize) -> FetchResult<Instruction> {
         Instruction::fetch(&self.code, offset)
     }
 
@@ -44,7 +44,7 @@ impl Chunk {
         let mut offset = 0;
         loop {
             let start = offset;
-            let Some(instr) = self.fetch(&mut offset) else {
+            let Ok(instr) = self.fetch(&mut offset) else {
                 break;
             };
             let info = self.disassemble_instruction(&instr, start);

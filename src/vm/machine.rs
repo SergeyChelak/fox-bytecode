@@ -1,10 +1,11 @@
 use crate::{
     chunk::{Chunk, Value},
-    vm::Instruction,
+    vm::{FetchError, Instruction},
 };
 
 const STACK_MAX_SIZE: usize = 256;
 
+#[derive(Debug)]
 pub enum MachineError {
     Compile(String),
     Runtime(String),
@@ -38,8 +39,11 @@ impl Machine {
     pub fn run(&mut self) -> MachineResult<()> {
         'run_loop: loop {
             let ip = self.ip;
-            let Some(instr) = self.chunk.fetch(&mut self.ip) else {
-                return Err(MachineError::runtime("Invalid instruction at {ip}"));
+            let fetch_result = self.chunk.fetch(&mut self.ip);
+            let instr = match fetch_result {
+                Ok(instr) => instr,
+                Err(FetchError::End) => break,
+                Err(err) => return Err(MachineError::Runtime(format!("{err}"))),
             };
             println!("{}", self.chunk.disassemble_instruction(&instr, ip));
             match instr {
@@ -103,5 +107,82 @@ impl Machine {
     fn stack_trace(&self) {
         // 15 . 2 . 2 Stack tracing
         todo!()
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn operation_negate() -> MachineResult<()> {
+        let mut chunk = Chunk::new();
+        chunk.write_opcode(crate::vm::OpCode::Negate, 1);
+        let mut machine = Machine::with(chunk);
+        machine.stack_push(10.0)?;
+        machine.run()?;
+        assert_eq!(machine.stack_pop().ok(), Some(-10.0));
+        Ok(())
+    }
+
+    #[test]
+    fn operation_add() -> MachineResult<()> {
+        let mut chunk = Chunk::new();
+        chunk.write_opcode(crate::vm::OpCode::Add, 1);
+        let mut machine = Machine::with(chunk);
+        machine.stack_push(2.0)?;
+        machine.stack_push(3.0)?;
+        machine.run()?;
+        assert_eq!(machine.stack_pop().ok(), Some(5.0));
+        Ok(())
+    }
+
+    #[test]
+    fn operation_sub() -> MachineResult<()> {
+        let mut chunk = Chunk::new();
+        chunk.write_opcode(crate::vm::OpCode::Subtract, 1);
+        let mut machine = Machine::with(chunk);
+        machine.stack_push(2.0)?;
+        machine.stack_push(3.0)?;
+        machine.run()?;
+        assert_eq!(machine.stack_pop().ok(), Some(-1.0));
+        Ok(())
+    }
+
+    #[test]
+    fn operation_mul() -> MachineResult<()> {
+        let mut chunk = Chunk::new();
+        chunk.write_opcode(crate::vm::OpCode::Multiply, 1);
+        let mut machine = Machine::with(chunk);
+        machine.stack_push(2.0)?;
+        machine.stack_push(3.0)?;
+        machine.run()?;
+        assert_eq!(machine.stack_pop().ok(), Some(6.0));
+        Ok(())
+    }
+
+    #[test]
+    fn operation_div() -> MachineResult<()> {
+        let mut chunk = Chunk::new();
+        chunk.write_opcode(crate::vm::OpCode::Divide, 1);
+        let mut machine = Machine::with(chunk);
+        machine.stack_push(6.0)?;
+        machine.stack_push(3.0)?;
+        machine.run()?;
+        assert_eq!(machine.stack_pop().ok(), Some(2.0));
+        Ok(())
+    }
+
+    #[test]
+    fn operation_constant() -> MachineResult<()> {
+        let mut chunk = Chunk::new();
+        chunk.write_opcode(crate::vm::OpCode::Constant, 1);
+        chunk.add_constant(2.0);
+        let idx = chunk.add_constant(10.0);
+        chunk.write_u8(idx as u8, 1);
+        let mut machine = Machine::with(chunk);
+        machine.run()?;
+        assert_eq!(machine.stack_pop().ok(), Some(10.0));
+        Ok(())
     }
 }
