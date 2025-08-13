@@ -46,14 +46,30 @@ impl Scanner {
             '+' => self.make_token(Plus),
             '/' => self.make_token(Slash),
             '*' => self.make_token(Star),
+            '!' => {
+                let cond = self.match_char('=');
+                self.condition_make_token(cond, BangEqual, Bang)
+            }
+            '=' => {
+                let cond = self.match_char('=');
+                self.condition_make_token(cond, EqualEqual, Equal)
+            }
+            '<' => {
+                let cond = self.match_char('=');
+                self.condition_make_token(cond, LessEqual, Less)
+            }
+            '>' => {
+                let cond = self.match_char('=');
+                self.condition_make_token(cond, GreaterEqual, Greater)
+            }
             _ => return Err(self.make_error("Unexpected character")),
         };
         Ok(token)
     }
 
-    fn is_at_end(&self) -> bool {
-        self.code_start_idx == self.code.len()
-    }
+    // fn is_at_end(&self) -> bool {
+    //     self.code_start_idx == self.code.len()
+    // }
 
     fn advance_char(&mut self) -> Option<char> {
         let ch = self.code.get(self.code_current_idx);
@@ -61,6 +77,27 @@ impl Scanner {
             self.code_current_idx += 1;
         }
         ch.cloned()
+    }
+
+    fn match_char(&mut self, expected: char) -> bool {
+        let Some(ch) = self.code.get(self.code_current_idx) else {
+            return false;
+        };
+        if *ch != expected {
+            return false;
+        }
+        self.code_current_idx += 1;
+        true
+    }
+
+    fn condition_make_token(
+        &self,
+        condition: bool,
+        true_case: TokenType,
+        false_case: TokenType,
+    ) -> Token {
+        let t_type = if condition { true_case } else { false_case };
+        self.make_token(t_type)
     }
 
     fn make_token(&self, t_type: TokenType) -> Token {
@@ -107,6 +144,37 @@ mod test {
             let result = scanner.scan_token();
             assert!(result.is_ok());
             assert_eq!(result.unwrap().t_type, t_type);
+
+            let result = scanner.scan_token();
+            assert!(result.is_ok());
+            assert!(matches!(result.unwrap().t_type, TokenType::Eof));
+        }
+    }
+
+    #[test]
+    fn scan_double_char_token() {
+        use TokenType::*;
+        let cases = [
+            ("!", Bang),
+            ("!=", BangEqual),
+            ("=", Equal),
+            ("==", EqualEqual),
+            ("<", Less),
+            ("<=", LessEqual),
+            (">", Greater),
+            (">=", GreaterEqual),
+        ];
+        for (ch, t_type) in cases {
+            let inp = ch.chars().collect::<Vec<_>>();
+
+            let mut scanner = Scanner::new(inp);
+            let result = scanner.scan_token();
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap().t_type, t_type);
+
+            let result = scanner.scan_token();
+            assert!(result.is_ok());
+            assert!(matches!(result.unwrap().t_type, TokenType::Eof));
         }
     }
 }
