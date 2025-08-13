@@ -64,6 +64,7 @@ impl Scanner {
                 self.condition_make_token(cond, GreaterEqual, Greater)
             }
             '"' => self.advance_string_token()?,
+            x if is_alphabetic(x) => self.advance_identifier()?,
             x if x.is_ascii_digit() => self.advance_number_token()?,
             x => return Err(self.make_error(&format!("Unexpected character '{x}'"))),
         };
@@ -116,6 +117,41 @@ impl Scanner {
             self.code_current_idx += 1;
         }
         ch
+    }
+
+    fn advance_identifier(&mut self) -> ScannerResult<Token> {
+        while let Some(ch) = self.peek_char() {
+            if !is_alphanumeric(ch) {
+                break;
+            }
+            self.advance_char();
+        }
+
+        let value = self.code[self.code_start_idx..self.code_current_idx]
+            .iter()
+            .collect::<std::string::String>();
+
+        use TokenType::*;
+        let t_type = match value.as_str() {
+            "and" => And,
+            "class" => Class,
+            "else" => Else,
+            "false" => False,
+            "for" => For,
+            "fun" => Fun,
+            "if" => If,
+            "nil" => Nil,
+            "or" => Or,
+            "print" => Print,
+            "return" => Return,
+            "super" => Super,
+            "this" => This,
+            "true" => True,
+            "var" => Var,
+            "while" => While,
+            _ => Identifier,
+        };
+        Ok(self.make_token(t_type))
     }
 
     fn advance_string_token(&mut self) -> ScannerResult<Token> {
@@ -198,6 +234,14 @@ impl Scanner {
             code_idx: self.code_start_idx,
         }
     }
+}
+
+fn is_alphabetic(ch: char) -> bool {
+    ch == '_' || ch.is_ascii_alphabetic()
+}
+
+fn is_alphanumeric(ch: char) -> bool {
+    ch == '_' || ch.is_ascii_alphanumeric()
 }
 
 #[cfg(test)]
@@ -304,6 +348,37 @@ mod test {
             let mut scanner = Scanner::new(code);
             let token = scanner.scan_token().unwrap();
             assert_eq!(token.t_type, TokenType::Number);
+        }
+    }
+
+    #[test]
+    fn scan_keywords_identifiers() {
+        use TokenType::*;
+        let cases = [
+            ("and", And),
+            ("class", Class),
+            ("else", Else),
+            ("false", False),
+            ("for", For),
+            ("fun", Fun),
+            ("if", If),
+            ("nil", Nil),
+            ("or", Or),
+            ("print", Print),
+            ("return", Return),
+            ("super", Super),
+            ("this", This),
+            ("true", True),
+            ("var", Var),
+            ("while", While),
+            ("my_identifier", Identifier),
+            ("__myId2", Identifier),
+        ];
+        for (case, t_type) in cases {
+            let code = case.chars().collect::<Vec<_>>();
+            let mut scanner = Scanner::new(code);
+            let token = scanner.scan_token().unwrap();
+            assert_eq!(token.t_type, t_type);
         }
     }
 }
