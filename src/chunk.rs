@@ -35,7 +35,7 @@ impl Chunk {
         self.constants.get(idx as usize).cloned()
     }
 
-    pub fn fetch(&mut self, offset: &mut usize) -> FetchResult<Instruction> {
+    pub fn fetch(&self, offset: &mut usize) -> FetchResult<Instruction> {
         Instruction::fetch(&self.code, offset)
     }
 

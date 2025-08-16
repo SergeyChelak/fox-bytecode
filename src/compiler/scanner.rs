@@ -4,11 +4,21 @@ use crate::utils::CodePosition;
 
 use super::{Token, TokenType};
 
+pub trait TokenSource {
+    fn scan_token(&mut self) -> Token;
+}
+
 pub struct Scanner {
     line: usize,
     code: Rc<Vec<char>>,
     code_start_idx: usize,
     code_current_idx: usize,
+}
+
+impl TokenSource for Scanner {
+    fn scan_token(&mut self) -> Token {
+        self.fetch_next_token()
+    }
 }
 
 impl Scanner {
@@ -21,7 +31,7 @@ impl Scanner {
         }
     }
 
-    pub fn scan_token(&mut self) -> Token {
+    fn fetch_next_token(&mut self) -> Token {
         self.skip_non_code();
         self.code_start_idx = self.code_current_idx;
 

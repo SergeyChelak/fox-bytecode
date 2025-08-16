@@ -1,7 +1,7 @@
 use crate::{
     chunk::{Chunk, Value},
     compiler::{
-        scanner::Scanner,
+        scanner::TokenSource,
         token::{Token, TokenType},
     },
     utils::ErrorInfo,
@@ -11,14 +11,14 @@ use crate::{
 pub struct Parser {
     current: Option<Token>,
     previous: Option<Token>,
-    scanner: Scanner,
+    scanner: Box<dyn TokenSource>,
     panic_mode: bool,
     chunk: Chunk,
     errors: Vec<ErrorInfo>,
 }
 
 impl Parser {
-    pub fn with(scanner: Scanner) -> Self {
+    pub fn with(scanner: Box<dyn TokenSource>) -> Self {
         Self {
             current: Default::default(),
             previous: Default::default(),
@@ -29,7 +29,7 @@ impl Parser {
         }
     }
 
-    pub fn compile(&mut self) -> Result<Chunk, Vec<ErrorInfo>> {
+    pub fn compile(&mut self) -> Result<(), Vec<ErrorInfo>> {
         self.advance();
         self.expression();
         self.consume(TokenType::Eof, "Expect end of expression");
@@ -37,7 +37,8 @@ impl Parser {
         if !self.errors.is_empty() {
             return Err(self.errors.clone());
         }
-        todo!()
+        Ok(())
+        // todo!()
     }
 
     fn advance(&mut self) {
@@ -103,10 +104,6 @@ impl Parser {
                 .expect("Infix is none");
             infix_rule(self);
         }
-    }
-
-    fn chunk_mut(&mut self) -> &mut Chunk {
-        &mut self.chunk
     }
 
     fn end_compiler(&mut self) {
@@ -192,8 +189,7 @@ impl Parser {
     }
 
     fn make_constant(&mut self, value: Value) -> u8 {
-        let chunk = self.chunk_mut();
-        let idx = chunk.add_constant(value);
+        let idx = self.chunk.add_constant(value);
         if idx > u8::MAX as usize {
             self.error("Too many constants in one chunk");
             // don't think it's a good decision
@@ -212,7 +208,7 @@ impl Parser {
             .unwrap_or_default();
         let bytes: Vec<u8> = instruction.into();
         for byte in bytes.into_iter() {
-            self.chunk_mut().write_u8(byte, line);
+            self.chunk.write_u8(byte, line);
         }
     }
 }
@@ -287,6 +283,154 @@ impl Default for ParseRule {
 #[cfg(test)]
 mod test_parser {
     use super::*;
+    use crate::utils::CodePosition;
+
+    #[test]
+    fn unary_chunk() {
+        let input = vec![Token::minus(), Token::number("12.345")];
+        let expectation = Expectation {
+            constants: vec![12.345],
+            instructions: vec![Instruction::Constant(0), Instruction::Negate],
+        };
+        state_expectation_test(input, expectation);
+    }
+
+    #[test]
+    fn binary_chunk() {
+        let data = [
+            (Token::minus(), Instruction::Subtract),
+            (Token::plus(), Instruction::Add),
+            (Token::multiply(), Instruction::Multiply),
+            (Token::divide(), Instruction::Divide),
+        ];
+        for (token, expected_instr) in data {
+            let input = vec![Token::number("3"), token, Token::number("5.0")];
+            let expectation = Expectation {
+                constants: vec![3.0, 5.0],
+                instructions: vec![
+                    Instruction::Constant(0),
+                    Instruction::Constant(1),
+                    expected_instr,
+                ],
+            };
+            state_expectation_test(input, expectation);
+        }
+    }
+
+    #[test]
+    fn grouping_chunk() {
+        // 3 * (5 + 7)
+        let input = vec![
+            Token::number("3"),
+            Token::multiply(),
+            Token::with_type(TokenType::LeftParenthesis),
+            Token::number("5.0"),
+            Token::plus(),
+            Token::number("7"),
+            Token::with_type(TokenType::RightParenthesis),
+        ];
+
+        let expectation = Expectation {
+            constants: vec![3.0, 5.0, 7.0],
+            instructions: vec![
+                Instruction::Constant(0),
+                Instruction::Constant(1),
+                Instruction::Constant(2),
+                Instruction::Add,
+                Instruction::Multiply,
+            ],
+        };
+
+        state_expectation_test(input, expectation);
+    }
+
+    fn state_expectation_test(input: Vec<Token>, expectation: Expectation) {
+        let mock = ScannerMock::new(input);
+        let mut parser = Parser::with(Box::new(mock));
+        let res = parser.compile();
+        assert!(res.is_ok());
+
+        let chunk = parser.chunk;
+        for (i, x) in expectation.constants.iter().enumerate() {
+            assert_eq!(chunk.read_const(i as u8), Some(*x));
+        }
+
+        let mut offset = 0;
+        for instr_exp in expectation.instructions {
+            let instr = chunk
+                .fetch(&mut offset)
+                .expect("Failed to fetch instruction");
+            assert_eq!(instr, instr_exp);
+        }
+    }
+
+    struct Expectation {
+        constants: Vec<Value>,
+        instructions: Vec<Instruction>,
+    }
+
+    struct ScannerMock {
+        idx: usize,
+        tokens: Vec<Token>,
+    }
+
+    impl ScannerMock {
+        fn new(tokens: Vec<Token>) -> Self {
+            Self { idx: 0, tokens }
+        }
+    }
+
+    impl TokenSource for ScannerMock {
+        fn scan_token(&mut self) -> Token {
+            let token = self.tokens.get(self.idx);
+            if token.is_some() {
+                self.idx += 1;
+            }
+            token.cloned().unwrap_or(Token::eof())
+        }
+    }
+
+    impl Token {
+        fn eof() -> Self {
+            Self::with_type(TokenType::Eof)
+        }
+
+        fn number(value: &str) -> Self {
+            Self::make(TokenType::Number, value)
+        }
+
+        fn minus() -> Self {
+            Self::make(TokenType::Minus, "-")
+        }
+
+        fn plus() -> Self {
+            Self::make(TokenType::Plus, "+")
+        }
+
+        fn multiply() -> Self {
+            Self::make(TokenType::Star, "*")
+        }
+
+        fn divide() -> Self {
+            Self::make(TokenType::Slash, "/")
+        }
+
+        fn with_type(t_type: TokenType) -> Self {
+            Self::make(t_type, "")
+        }
+
+        fn make(t_type: TokenType, text: &str) -> Self {
+            let position = CodePosition {
+                line: 0,
+                absolute_index: 0,
+            };
+            Self {
+                t_type,
+                text: text.to_string(),
+                position,
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -296,15 +440,15 @@ mod test_precedence {
     #[test]
     fn increase_less_equal() {
         use Precedence::*;
-        let priorities = [
+        let precedence = [
             None, Assignment, Or, And, Equality, Comparison, Term, Factor, Unary, Call, Primary,
         ];
 
-        for (i, item) in priorities.iter().enumerate() {
+        for (i, item) in precedence.iter().enumerate() {
             let next = item.increased();
             assert!(item.le(&item));
             assert!(item.le(&next));
-            let next_val = priorities.get(i + 1).unwrap_or(&Precedence::Primary);
+            let next_val = precedence.get(i + 1).unwrap_or(&Precedence::Primary);
             assert_eq!(next, *next_val);
         }
     }

@@ -12,6 +12,7 @@ pub enum OpCode {
     Return,
 }
 
+#[derive(Debug, PartialEq)]
 pub enum Instruction {
     Constant(u8),
     Negate,
