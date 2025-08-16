@@ -4,19 +4,7 @@ use crate::{
 };
 
 const STACK_MAX_SIZE: usize = 256;
-
-#[derive(Debug)]
-pub enum MachineError {
-    Compile(String),
-    Runtime(String),
-}
-
-impl MachineError {
-    pub fn runtime(message: &str) -> Self {
-        Self::Runtime(message.to_string())
-    }
-}
-
+pub type MachineError = String;
 pub type MachineResult<T> = Result<T, MachineError>;
 
 pub struct Machine {
@@ -43,7 +31,7 @@ impl Machine {
             let instr = match fetch_result {
                 Ok(instr) => instr,
                 Err(FetchError::End) => break,
-                Err(err) => return Err(MachineError::Runtime(format!("{err}"))),
+                Err(err) => return Err(self.runtime_error(format!("{err}"))),
             };
             println!("{}", self.chunk.disassemble_instruction(&instr, ip));
             match instr {
@@ -78,7 +66,7 @@ impl Machine {
 
     fn read_const(&self, index: u8) -> MachineResult<Value> {
         let Some(value) = self.chunk.read_const(index) else {
-            return Err(MachineError::runtime("Invalid constant index"));
+            return Err(self.runtime_error("Invalid constant index"));
         };
         Ok(value)
     }
@@ -89,7 +77,7 @@ impl Machine {
 
     fn stack_push(&mut self, value: Value) -> MachineResult<()> {
         if self.stack_top >= STACK_MAX_SIZE {
-            return Err(MachineError::runtime("Stack overflow"));
+            return Err(self.runtime_error("Stack overflow"));
         }
         self.stack[self.stack_top] = value;
         self.stack_top += 1;
@@ -98,7 +86,7 @@ impl Machine {
 
     fn stack_pop(&mut self) -> MachineResult<Value> {
         if self.stack_top == 0 {
-            return Err(MachineError::runtime("Pop on empty stack"));
+            return Err(self.runtime_error("Pop on empty stack"));
         }
         self.stack_top -= 1;
         Ok(self.stack[self.stack_top])
@@ -107,6 +95,10 @@ impl Machine {
     fn stack_trace(&self) {
         // 15 . 2 . 2 Stack tracing
         todo!()
+    }
+
+    fn runtime_error<T: AsRef<str>>(&self, message: T) -> MachineError {
+        message.as_ref().to_string()
     }
 }
 

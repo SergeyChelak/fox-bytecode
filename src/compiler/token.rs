@@ -1,8 +1,10 @@
+use crate::utils::CodePosition;
+
+#[derive(Debug, Clone)]
 pub struct Token {
     pub t_type: TokenType,
-    pub code_idx: usize,
-    pub length: usize,
-    pub line: usize,
+    pub text: String,
+    pub position: CodePosition,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
@@ -50,5 +52,12 @@ pub enum TokenType {
     Var,
     While,
     //
+    Error,
     Eof,
+}
+
+impl Token {
+    pub fn is_err(&self) -> bool {
+        matches!(self.t_type, TokenType::Error)
+    }
 }

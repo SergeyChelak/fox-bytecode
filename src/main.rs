@@ -1,10 +1,10 @@
-use std::process::exit;
+use std::{process::exit, rc::Rc};
 
-use crate::{scanner::Scanner, vm::MachineError};
+use crate::{compiler::compile, utils::ErrorFormatter, vm::Machine};
 
 mod chunk;
-mod scanner;
-mod token;
+mod compiler;
+mod utils;
 mod vm;
 
 fn main() {
@@ -22,20 +22,30 @@ fn run_file<T: AsRef<str>>(path: T) {
         exit(-1);
     };
     let code = data.chars().collect::<Vec<_>>();
-    run(code);
+    interpret(code);
 }
 
-fn run(code: Vec<char>) {
-    // compile
-    let mut scanner = Scanner::new(code);
+fn interpret(code: Vec<char>) {
+    let code_ref = Rc::new(code);
+    let result = compile(code_ref.clone());
+    match result {
+        Ok(chunk) => {
+            let mut vm = Machine::with(chunk);
+            let result = vm.run();
+
+            if let Err(err) = result {
+                eprintln!("Runtime error: {err}")
+            }
+        }
+        Err(arr) => {
+            let formatter = ErrorFormatter::with(code_ref);
+            for err in &arr {
+                formatter.format_error(err);
+            }
+        }
+    }
 }
 
 fn show_usage() {
     println!("Usage: fox-bytecode <script.fox>");
-}
-
-fn show_machine_error(err: MachineError) {
-    match err {
-        MachineError::Compile(s) | MachineError::Runtime(s) => eprintln!("{s}"),
-    }
 }

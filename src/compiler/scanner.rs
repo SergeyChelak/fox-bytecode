@@ -1,23 +1,18 @@
-use crate::token::{Token, TokenType};
+use std::rc::Rc;
+
+use crate::utils::CodePosition;
+
+use super::{Token, TokenType};
 
 pub struct Scanner {
     line: usize,
-    code: Vec<char>,
+    code: Rc<Vec<char>>,
     code_start_idx: usize,
     code_current_idx: usize,
 }
 
-#[derive(Debug)]
-pub struct ScannerError {
-    pub message: String,
-    line: usize,
-    code_idx: usize,
-}
-
-pub type ScannerResult<T> = Result<T, ScannerError>;
-
 impl Scanner {
-    pub fn new(code: Vec<char>) -> Self {
+    pub fn new(code: Rc<Vec<char>>) -> Self {
         Self {
             line: 1,
             code,
@@ -26,12 +21,12 @@ impl Scanner {
         }
     }
 
-    pub fn scan_token(&mut self) -> ScannerResult<Token> {
+    pub fn scan_token(&mut self) -> Token {
         self.skip_non_code();
         self.code_start_idx = self.code_current_idx;
 
         let Some(ch) = self.advance_char() else {
-            return Ok(self.make_token(TokenType::Eof));
+            return self.make_token(TokenType::Eof);
         };
 
         use TokenType::*;
@@ -63,12 +58,12 @@ impl Scanner {
                 let cond = self.match_char('=');
                 self.condition_make_token(cond, GreaterEqual, Greater)
             }
-            '"' => self.advance_string_token()?,
-            x if is_alphabetic(x) => self.advance_identifier()?,
-            x if x.is_ascii_digit() => self.advance_number_token()?,
-            x => return Err(self.make_error(&format!("Unexpected character '{x}'"))),
+            '"' => self.advance_string_token(),
+            x if is_alphabetic(x) => self.advance_identifier(),
+            x if x.is_ascii_digit() => self.advance_number_token(),
+            x => self.make_error_token(&format!("Unexpected character '{x}'")),
         };
-        Ok(token)
+        token
     }
 
     fn skip_non_code(&mut self) {
@@ -119,7 +114,7 @@ impl Scanner {
         ch
     }
 
-    fn advance_identifier(&mut self) -> ScannerResult<Token> {
+    fn advance_identifier(&mut self) -> Token {
         while let Some(ch) = self.peek_char() {
             if !is_alphanumeric(ch) {
                 break;
@@ -127,9 +122,7 @@ impl Scanner {
             self.advance_char();
         }
 
-        let value = self.code[self.code_start_idx..self.code_current_idx]
-            .iter()
-            .collect::<std::string::String>();
+        let value = self.current_lexeme();
 
         use TokenType::*;
         let t_type = match value.as_str() {
@@ -151,10 +144,16 @@ impl Scanner {
             "while" => While,
             _ => Identifier,
         };
-        Ok(self.make_token(t_type))
+        self.make_token(t_type)
     }
 
-    fn advance_string_token(&mut self) -> ScannerResult<Token> {
+    fn current_lexeme(&self) -> String {
+        self.code[self.code_start_idx..self.code_current_idx]
+            .iter()
+            .collect::<std::string::String>()
+    }
+
+    fn advance_string_token(&mut self) -> Token {
         while let Some(ch) = self.peek_char() {
             match ch {
                 '"' => break,
@@ -164,13 +163,13 @@ impl Scanner {
             self.advance_char();
         }
         if self.peek_char().is_none() {
-            return Err(self.make_error("Unterminated string"));
+            return self.make_error_token("Unterminated string");
         }
         self.advance_char();
-        Ok(self.make_token(TokenType::String))
+        self.make_token(TokenType::String)
     }
 
-    fn advance_number_token(&mut self) -> ScannerResult<Token> {
+    fn advance_number_token(&mut self) -> Token {
         while let Some(ch) = self.peek_char() {
             if !ch.is_ascii_digit() {
                 break;
@@ -194,7 +193,7 @@ impl Scanner {
             self.advance_char();
         }
 
-        Ok(self.make_token(TokenType::Number))
+        self.make_token(TokenType::Number)
     }
 
     fn match_char(&mut self, expected: char) -> bool {
@@ -221,17 +220,23 @@ impl Scanner {
     fn make_token(&self, t_type: TokenType) -> Token {
         Token {
             t_type,
-            code_idx: self.code_start_idx,
-            length: self.code_current_idx - self.code_start_idx,
-            line: self.line,
+            text: self.current_lexeme(),
+            position: self.code_position(),
         }
     }
 
-    fn make_error(&self, message: &str) -> ScannerError {
-        ScannerError {
-            message: message.to_string(),
+    fn make_error_token(&self, message: &str) -> Token {
+        Token {
+            t_type: TokenType::Error,
+            text: message.to_string(),
+            position: self.code_position(),
+        }
+    }
+
+    fn code_position(&self) -> CodePosition {
+        CodePosition {
             line: self.line,
-            code_idx: self.code_start_idx,
+            absolute_index: self.code_start_idx,
         }
     }
 }
@@ -247,6 +252,12 @@ fn is_alphanumeric(ch: char) -> bool {
 #[cfg(test)]
 mod test {
     use super::*;
+
+    impl Scanner {
+        fn with_raw_code(code: Vec<char>) -> Self {
+            Self::new(Rc::new(code))
+        }
+    }
 
     #[test]
     fn scan_single_char_token() {
@@ -266,14 +277,12 @@ mod test {
 
         for (ch, t_type) in data {
             let inp = vec![ch];
-            let mut scanner = Scanner::new(inp);
+            let mut scanner = Scanner::with_raw_code(inp);
             let result = scanner.scan_token();
-            assert!(result.is_ok());
-            assert_eq!(result.unwrap().t_type, t_type);
+            assert_eq!(result.t_type, t_type);
 
             let result = scanner.scan_token();
-            assert!(result.is_ok());
-            assert!(matches!(result.unwrap().t_type, TokenType::Eof));
+            assert!(matches!(result.t_type, TokenType::Eof));
         }
     }
 
@@ -293,14 +302,12 @@ mod test {
         for (ch, t_type) in cases {
             let inp = ch.chars().collect::<Vec<_>>();
 
-            let mut scanner = Scanner::new(inp);
+            let mut scanner = Scanner::with_raw_code(inp);
             let result = scanner.scan_token();
-            assert!(result.is_ok());
-            assert_eq!(result.unwrap().t_type, t_type);
+            assert_eq!(result.t_type, t_type);
 
             let result = scanner.scan_token();
-            assert!(result.is_ok());
-            assert!(matches!(result.unwrap().t_type, TokenType::Eof));
+            assert!(matches!(result.t_type, TokenType::Eof));
         }
     }
 
@@ -308,10 +315,10 @@ mod test {
     fn scan_skip_whitespace() {
         let code = "\t. ,\n!".chars().collect::<Vec<_>>();
 
-        let mut scanner = Scanner::new(code);
-        assert_eq!(scanner.scan_token().unwrap().t_type, TokenType::Dot);
-        assert_eq!(scanner.scan_token().unwrap().t_type, TokenType::Comma);
-        assert_eq!(scanner.scan_token().unwrap().t_type, TokenType::Bang);
+        let mut scanner = Scanner::with_raw_code(code);
+        assert_eq!(scanner.scan_token().t_type, TokenType::Dot);
+        assert_eq!(scanner.scan_token().t_type, TokenType::Comma);
+        assert_eq!(scanner.scan_token().t_type, TokenType::Bang);
     }
 
     #[test]
@@ -319,24 +326,24 @@ mod test {
         let code = "\n    // hello\n . // world\n   \t,"
             .chars()
             .collect::<Vec<_>>();
-        let mut scanner = Scanner::new(code);
-        assert_eq!(scanner.scan_token().unwrap().t_type, TokenType::Dot);
-        assert_eq!(scanner.scan_token().unwrap().t_type, TokenType::Comma);
+        let mut scanner = Scanner::with_raw_code(code);
+        assert_eq!(scanner.scan_token().t_type, TokenType::Dot);
+        assert_eq!(scanner.scan_token().t_type, TokenType::Comma);
     }
 
     #[test]
     fn scan_literal_token() {
         let code = "\"1234\"".chars().collect::<Vec<_>>();
-        let mut scanner = Scanner::new(code);
-        let token = scanner.scan_token().unwrap();
+        let mut scanner = Scanner::with_raw_code(code);
+        let token = scanner.scan_token();
         assert_eq!(token.t_type, TokenType::String);
-        assert_eq!(token.length, 6);
+        assert_eq!(token.text, "\"1234\"");
     }
 
     #[test]
     fn scan_literal_token_unterminated() {
         let code = "\"1234".chars().collect::<Vec<_>>();
-        let mut scanner = Scanner::new(code);
+        let mut scanner = Scanner::with_raw_code(code);
         assert!(scanner.scan_token().is_err());
     }
 
@@ -345,8 +352,8 @@ mod test {
         let cases = ["1", "123", "12.23"];
         for case in cases {
             let code = case.chars().collect::<Vec<_>>();
-            let mut scanner = Scanner::new(code);
-            let token = scanner.scan_token().unwrap();
+            let mut scanner = Scanner::with_raw_code(code);
+            let token = scanner.scan_token();
             assert_eq!(token.t_type, TokenType::Number);
         }
     }
@@ -376,8 +383,8 @@ mod test {
         ];
         for (case, t_type) in cases {
             let code = case.chars().collect::<Vec<_>>();
-            let mut scanner = Scanner::new(code);
-            let token = scanner.scan_token().unwrap();
+            let mut scanner = Scanner::with_raw_code(code);
+            let token = scanner.scan_token();
             assert_eq!(token.t_type, t_type);
         }
     }

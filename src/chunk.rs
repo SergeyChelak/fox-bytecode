@@ -39,7 +39,7 @@ impl Chunk {
         Instruction::fetch(&self.code, offset)
     }
 
-    pub fn disassemble(&mut self) -> String {
+    pub fn _disassemble(&mut self) -> String {
         let mut output = Vec::new();
         let mut offset = 0;
         loop {

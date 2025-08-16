@@ -53,10 +53,23 @@ impl Display for FetchError {
     }
 }
 
+impl Into<Vec<u8>> for Instruction {
+    fn into(self) -> Vec<u8> {
+        match self {
+            Instruction::Constant(val) => vec![OpCode::Constant as u8, val],
+            Instruction::Negate => vec![OpCode::Negate as u8],
+            Instruction::Add => vec![OpCode::Add as u8],
+            Instruction::Subtract => vec![OpCode::Subtract as u8],
+            Instruction::Multiply => vec![OpCode::Multiply as u8],
+            Instruction::Divide => vec![OpCode::Divide as u8],
+            Instruction::Return => vec![OpCode::Return as u8],
+        }
+    }
+}
+
 pub type FetchResult<T> = Result<T, FetchError>;
 
 impl Instruction {
-    // TODO: refactor to return result <Ok, End | Broken | Unknown>
     pub fn fetch(buffer: &[u8], offset: &mut usize) -> FetchResult<Self> {
         let byte = consume(buffer, offset).ok_or(FetchError::End)?;
         match byte {
