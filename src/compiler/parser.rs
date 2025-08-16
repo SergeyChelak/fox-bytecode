@@ -72,7 +72,7 @@ impl Parser {
     }
 
     fn expression(&mut self) {
-        todo!()
+        self.parse_precedence(Precedence::Assignment);
     }
 
     fn consume<T: AsRef<str>>(&mut self, t_type: TokenType, message: T) {
@@ -84,6 +84,25 @@ impl Parser {
         };
 
         self.error_at_current(message.as_ref());
+    }
+
+    fn parse_precedence(&mut self, precedence: Precedence) {
+        self.advance();
+        let t_type = self.prev_token_type();
+        let Some(prefix_rule) = self.get_rule(t_type).prefix else {
+            self.error("Expect expression");
+            return;
+        };
+        prefix_rule(self);
+
+        while precedence.le(&self.get_rule(self.cur_token_type()).precedence) {
+            self.advance();
+            let infix_rule = self
+                .get_rule(self.prev_token_type())
+                .infix
+                .expect("Infix is none");
+            infix_rule(self);
+        }
     }
 
     fn chunk_mut(&mut self) -> &mut Chunk {
@@ -115,11 +134,55 @@ impl Parser {
     }
 
     fn unary(&mut self) {
-        // TODO: made according to the book, don't think this is acceptable
-        let operator_type = self.previous.as_ref().map(|t| t.t_type);
-        self.expression();
-        if matches!(operator_type, Some(TokenType::Minus)) {
+        // TODO: made according to the book, looks bad...
+        let operator_type = self.prev_token_type();
+        // Compile the operand
+        self.parse_precedence(Precedence::Unary);
+
+        // Emit the operator instruction
+        if matches!(operator_type, TokenType::Minus) {
             self.emit_instruction(Instruction::Negate)
+        }
+    }
+
+    fn binary(&mut self) {
+        let operator_type = self.prev_token_type();
+        let rule = self.get_rule(operator_type);
+        self.parse_precedence(rule.precedence.increased());
+
+        let inst = match operator_type {
+            TokenType::Plus => Instruction::Add,
+            TokenType::Minus => Instruction::Subtract,
+            TokenType::Star => Instruction::Multiply,
+            TokenType::Slash => Instruction::Divide,
+            x => unreachable!("Unexpected binary operator {x:?}"),
+        };
+        self.emit_instruction(inst);
+    }
+
+    fn prev_token_type(&self) -> TokenType {
+        self.previous
+            .as_ref()
+            .map(|t| t.t_type)
+            .expect("Bug: previous token is none")
+    }
+
+    fn cur_token_type(&self) -> TokenType {
+        self.current
+            .as_ref()
+            .map(|t| t.t_type)
+            .expect("Bug: previous token is none")
+    }
+
+    fn get_rule(&self, t_type: TokenType) -> ParseRule {
+        use TokenType::*;
+        match t_type {
+            LeftParenthesis => ParseRule::new(Some(Self::grouping), None, Precedence::None),
+            Minus => ParseRule::new(Some(Self::unary), Some(Self::binary), Precedence::Term),
+            Plus => ParseRule::new(None, Some(Self::binary), Precedence::Term),
+            Slash | Star => ParseRule::new(None, Some(Self::binary), Precedence::Factor),
+            Number => ParseRule::new(Some(Self::number), None, Precedence::None),
+            _ => Default::default(),
         }
     }
 
@@ -150,6 +213,99 @@ impl Parser {
         let bytes: Vec<u8> = instruction.into();
         for byte in bytes.into_iter() {
             self.chunk_mut().write_u8(byte, line);
+        }
+    }
+}
+
+#[repr(u8)]
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum Precedence {
+    None,
+    Assignment, // =
+    Or,         // or
+    And,        // and
+    Equality,   // == !=
+    Comparison, // < > <= >=
+    Term,       // + -
+    Factor,     // * /
+    Unary,      // ! -
+    Call,       // . ()
+    Primary,
+}
+
+impl Precedence {
+    fn increased(&self) -> Self {
+        use Precedence::*;
+        match self {
+            None => Assignment,
+            Assignment => Or,
+            Or => And,
+            And => Equality,
+            Equality => Comparison,
+            Comparison => Term,
+            Term => Factor,
+            Factor => Unary,
+            Unary => Call,
+            Call => Primary,
+            Primary => Primary, //unreachable!("undefined behavior by the book"),
+        }
+    }
+
+    fn le(&self, other: &Self) -> bool {
+        *self as u8 <= *other as u8
+    }
+}
+
+type ParseFn = fn(&mut Parser);
+
+struct ParseRule {
+    prefix: Option<ParseFn>,
+    infix: Option<ParseFn>,
+    precedence: Precedence,
+}
+
+impl ParseRule {
+    fn new(prefix: Option<ParseFn>, infix: Option<ParseFn>, precedence: Precedence) -> Self {
+        Self {
+            prefix,
+            infix,
+            precedence,
+        }
+    }
+}
+
+impl Default for ParseRule {
+    fn default() -> Self {
+        Self {
+            precedence: Precedence::None,
+            prefix: Default::default(),
+            infix: Default::default(),
+        }
+    }
+}
+
+#[cfg(test)]
+mod test_parser {
+    use super::*;
+}
+
+#[cfg(test)]
+mod test_precedence {
+    use super::*;
+
+    #[test]
+    fn increase_less_equal() {
+        use Precedence::*;
+        let priorities = [
+            None, Assignment, Or, And, Equality, Comparison, Term, Factor, Unary, Call, Primary,
+        ];
+
+        for (i, item) in priorities.iter().enumerate() {
+            let next = item.increased();
+            assert!(item.le(&item));
+            assert!(item.le(&next));
+            let next_val = priorities.get(i + 1).unwrap_or(&Precedence::Primary);
+            assert_eq!(next, *next_val);
         }
     }
 }
