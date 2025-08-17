@@ -40,7 +40,7 @@ impl Scanner {
         };
 
         use TokenType::*;
-        let token = match ch {
+        match ch {
             '(' => self.make_token(LeftParenthesis),
             ')' => self.make_token(RightParenthesis),
             '{' => self.make_token(LeftBrace),
@@ -72,8 +72,7 @@ impl Scanner {
             x if is_alphabetic(x) => self.advance_identifier(),
             x if x.is_ascii_digit() => self.advance_number_token(),
             x => self.make_error_token(&format!("Unexpected character '{x}'")),
-        };
-        token
+        }
     }
 
     fn skip_non_code(&mut self) {

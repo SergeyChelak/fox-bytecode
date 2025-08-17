@@ -35,14 +35,6 @@ impl Value {
         Ok(Self::number(value))
     }
 
-    // pub fn nil() -> Self {
-    //     Self::Nil
-    // }
-
-    // pub fn boolean(value: bool) -> Self {
-    //     Self::Bool(value)
-    // }
-
     // fn is_nil(&self) -> bool {
     //     matches!(self, Value::Nil)
     // }
@@ -55,7 +47,7 @@ impl Value {
     //     matches!(self, Value::Bool(_))
     // }
 
-    pub fn to_number(&self) -> Option<Double> {
+    pub fn as_number(&self) -> Option<Double> {
         match self {
             Value::Number(x) => Some(*x),
             _ => None,

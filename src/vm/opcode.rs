@@ -1,20 +1,22 @@
 use std::fmt::Display;
 
-#[repr(u8)]
-#[derive(Clone, Copy)]
-pub enum OpCode {
-    Constant,
-    Negate,
-    Add,
-    Subtract,
-    Multiply,
-    Divide,
-    Return,
-}
+pub const OPCODE_CONSTANT: u8 = 0;
+pub const OPCODE_NIL: u8 = 1;
+pub const OPCODE_TRUE: u8 = 2;
+pub const OPCODE_FALSE: u8 = 3;
+pub const OPCODE_NEGATE: u8 = 4;
+pub const OPCODE_ADD: u8 = 5;
+pub const OPCODE_SUBTRACT: u8 = 6;
+pub const OPCODE_MULTIPLY: u8 = 7;
+pub const OPCODE_DIVIDE: u8 = 8;
+pub const OPCODE_RETURN: u8 = 9;
 
 #[derive(Debug, PartialEq)]
 pub enum Instruction {
     Constant(u8),
+    Nil,
+    True,
+    False,
     Negate,
     Add,
     Subtract,
@@ -27,6 +29,9 @@ impl Display for Instruction {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Instruction::Constant(x) => write!(f, "const {x}"),
+            Instruction::Nil => write!(f, "nil"),
+            Instruction::True => write!(f, "true"),
+            Instruction::False => write!(f, "false"),
             Instruction::Negate => write!(f, "negate"),
             Instruction::Add => write!(f, "add"),
             Instruction::Subtract => write!(f, "subtract"),
@@ -54,16 +59,20 @@ impl Display for FetchError {
     }
 }
 
+#[allow(clippy::from_over_into)]
 impl Into<Vec<u8>> for Instruction {
     fn into(self) -> Vec<u8> {
         match self {
-            Instruction::Constant(val) => vec![OpCode::Constant as u8, val],
-            Instruction::Negate => vec![OpCode::Negate as u8],
-            Instruction::Add => vec![OpCode::Add as u8],
-            Instruction::Subtract => vec![OpCode::Subtract as u8],
-            Instruction::Multiply => vec![OpCode::Multiply as u8],
-            Instruction::Divide => vec![OpCode::Divide as u8],
-            Instruction::Return => vec![OpCode::Return as u8],
+            Instruction::Constant(val) => vec![OPCODE_CONSTANT, val],
+            Instruction::Nil => vec![OPCODE_NIL],
+            Instruction::True => vec![OPCODE_TRUE],
+            Instruction::False => vec![OPCODE_FALSE],
+            Instruction::Negate => vec![OPCODE_NEGATE],
+            Instruction::Add => vec![OPCODE_ADD],
+            Instruction::Subtract => vec![OPCODE_SUBTRACT],
+            Instruction::Multiply => vec![OPCODE_MULTIPLY],
+            Instruction::Divide => vec![OPCODE_DIVIDE],
+            Instruction::Return => vec![OPCODE_RETURN],
         }
     }
 }
@@ -74,18 +83,22 @@ impl Instruction {
     pub fn fetch(buffer: &[u8], offset: &mut usize) -> FetchResult<Self> {
         let byte = consume(buffer, offset).ok_or(FetchError::End)?;
         match byte {
-            x if x == OpCode::Constant as u8 => {
+            OPCODE_CONSTANT => {
                 let arg1 = consume(buffer, offset).ok_or(FetchError::Broken)?;
                 Ok(Instruction::Constant(arg1))
             }
-            x if x == OpCode::Negate as u8 => Ok(Instruction::Negate),
+            OPCODE_NEGATE => Ok(Instruction::Negate),
 
-            x if x == OpCode::Add as u8 => Ok(Instruction::Add),
-            x if x == OpCode::Subtract as u8 => Ok(Instruction::Subtract),
-            x if x == OpCode::Multiply as u8 => Ok(Instruction::Multiply),
-            x if x == OpCode::Divide as u8 => Ok(Instruction::Divide),
+            OPCODE_NIL => Ok(Instruction::Nil),
+            OPCODE_TRUE => Ok(Instruction::True),
+            OPCODE_FALSE => Ok(Instruction::False),
 
-            x if x == OpCode::Return as u8 => Ok(Instruction::Return),
+            OPCODE_ADD => Ok(Instruction::Add),
+            OPCODE_SUBTRACT => Ok(Instruction::Subtract),
+            OPCODE_MULTIPLY => Ok(Instruction::Multiply),
+            OPCODE_DIVIDE => Ok(Instruction::Divide),
+
+            OPCODE_RETURN => Ok(Instruction::Return),
             x => Err(FetchError::Unknown(x)),
         }
     }
@@ -111,7 +124,7 @@ mod test {
 
     #[test]
     fn instruction_fetch_return() {
-        let buffer = [OpCode::Return as u8];
+        let buffer = [OPCODE_RETURN];
         let mut offset = 0;
         let instr = Instruction::fetch(&buffer, &mut offset);
         assert!(instr.is_ok());
@@ -123,7 +136,7 @@ mod test {
     #[test]
     fn instruction_fetch_constant() {
         let idx = 3u8;
-        let buffer = [OpCode::Constant as u8, idx];
+        let buffer = [OPCODE_CONSTANT, idx];
         let mut offset = 0;
         let instr = Instruction::fetch(&buffer, &mut offset);
         assert!(instr.is_ok());

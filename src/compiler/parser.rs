@@ -158,6 +158,15 @@ impl Parser {
         self.emit_instruction(inst);
     }
 
+    fn literal(&mut self) {
+        match self.prev_token_type() {
+            TokenType::False => self.emit_instruction(Instruction::False),
+            TokenType::True => self.emit_instruction(Instruction::True),
+            TokenType::Nil => self.emit_instruction(Instruction::Nil),
+            _ => unreachable!("literal"),
+        }
+    }
+
     fn prev_token_type(&self) -> TokenType {
         self.previous
             .as_ref()
@@ -180,6 +189,7 @@ impl Parser {
             Plus => ParseRule::new(None, Some(Self::binary), Precedence::Term),
             Slash | Star => ParseRule::new(None, Some(Self::binary), Precedence::Factor),
             Number => ParseRule::new(Some(Self::number), None, Precedence::None),
+            Nil | False | True => ParseRule::new(Some(Self::literal), None, Precedence::None),
             _ => Default::default(),
         }
     }
@@ -447,7 +457,7 @@ mod test_precedence {
 
         for (i, item) in precedence.iter().enumerate() {
             let next = item.increased();
-            assert!(item.le(&item));
+            assert!(item.le(item));
             assert!(item.le(&next));
             let next_val = precedence.get(i + 1).unwrap_or(&Precedence::Primary);
             assert_eq!(next, *next_val);
