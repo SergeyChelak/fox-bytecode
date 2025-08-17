@@ -5,6 +5,7 @@ use crate::{compiler::compile, utils::ErrorFormatter, vm::Machine};
 mod chunk;
 mod compiler;
 mod utils;
+mod value;
 mod vm;
 
 fn main() {

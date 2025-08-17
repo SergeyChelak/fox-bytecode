@@ -1,6 +1,7 @@
-use crate::vm::{FetchResult, Instruction, OpCode};
-
-pub type Value = f32;
+use crate::{
+    value::Value,
+    vm::{FetchResult, Instruction, OpCode},
+};
 
 pub struct Chunk {
     code: Vec<u8>,

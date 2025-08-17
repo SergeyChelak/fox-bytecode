@@ -1,5 +1,6 @@
 use crate::{
-    chunk::{Chunk, Value},
+    chunk::Chunk,
+    value::{Double, Value},
     vm::{FetchError, Instruction},
 };
 
@@ -45,7 +46,10 @@ impl Machine {
                 Instruction::Divide => self.do_binary(|a, b| a / b)?,
                 Instruction::Negate => {
                     let value = self.stack_pop()?;
-                    self.stack_push(-value)?;
+                    let Some(value) = value.to_number() else {
+                        return Err("Operand must be a number".to_string());
+                    };
+                    self.stack_push(Value::number(-value))?;
                 }
                 Instruction::Return => {
                     let value = self.stack_pop()?;
@@ -57,11 +61,14 @@ impl Machine {
         Ok(())
     }
 
-    fn do_binary(&mut self, operation: fn(Value, Value) -> Value) -> MachineResult<()> {
+    fn do_binary(&mut self, operation: fn(Double, Double) -> Double) -> MachineResult<()> {
         let b = self.stack_pop()?;
         let a = self.stack_pop()?;
+        let (Some(a), Some(b)) = (a.to_number(), b.to_number()) else {
+            return Err("Operands must be numbers".to_string());
+        };
         let val = operation(a, b);
-        self.stack_push(val)
+        self.stack_push(Value::number(val))
     }
 
     fn read_const(&self, index: u8) -> MachineResult<Value> {
@@ -105,15 +112,16 @@ impl Machine {
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::vm::*;
 
     #[test]
     fn operation_negate() -> MachineResult<()> {
         let mut chunk = Chunk::new();
-        chunk.write_opcode(crate::vm::OpCode::Negate, 1);
+        chunk.write_opcode(OpCode::Negate, 1);
         let mut machine = Machine::with(chunk);
-        machine.stack_push(10.0)?;
+        machine.stack_push(Value::number(10.0))?;
         machine.run()?;
-        assert_eq!(machine.stack_pop().ok(), Some(-10.0));
+        assert_eq!(machine.stack_pop().unwrap().to_number(), Some(-10.0));
         Ok(())
     }
 
@@ -122,10 +130,10 @@ mod test {
         let mut chunk = Chunk::new();
         chunk.write_opcode(crate::vm::OpCode::Add, 1);
         let mut machine = Machine::with(chunk);
-        machine.stack_push(2.0)?;
-        machine.stack_push(3.0)?;
+        machine.stack_push(Value::number(2.0))?;
+        machine.stack_push(Value::number(3.0))?;
         machine.run()?;
-        assert_eq!(machine.stack_pop().ok(), Some(5.0));
+        assert_eq!(machine.stack_pop().unwrap().to_number(), Some(5.0));
         Ok(())
     }
 
@@ -134,22 +142,22 @@ mod test {
         let mut chunk = Chunk::new();
         chunk.write_opcode(crate::vm::OpCode::Subtract, 1);
         let mut machine = Machine::with(chunk);
-        machine.stack_push(2.0)?;
-        machine.stack_push(3.0)?;
+        machine.stack_push(Value::number(2.0))?;
+        machine.stack_push(Value::number(3.0))?;
         machine.run()?;
-        assert_eq!(machine.stack_pop().ok(), Some(-1.0));
+        assert_eq!(machine.stack_pop().unwrap().to_number(), Some(-1.0));
         Ok(())
     }
 
     #[test]
     fn operation_mul() -> MachineResult<()> {
         let mut chunk = Chunk::new();
-        chunk.write_opcode(crate::vm::OpCode::Multiply, 1);
+        chunk.write_opcode(OpCode::Multiply, 1);
         let mut machine = Machine::with(chunk);
-        machine.stack_push(2.0)?;
-        machine.stack_push(3.0)?;
+        machine.stack_push(Value::number(2.0))?;
+        machine.stack_push(Value::number(3.0))?;
         machine.run()?;
-        assert_eq!(machine.stack_pop().ok(), Some(6.0));
+        assert_eq!(machine.stack_pop().unwrap().to_number(), Some(6.0));
         Ok(())
     }
 
@@ -158,10 +166,10 @@ mod test {
         let mut chunk = Chunk::new();
         chunk.write_opcode(crate::vm::OpCode::Divide, 1);
         let mut machine = Machine::with(chunk);
-        machine.stack_push(6.0)?;
-        machine.stack_push(3.0)?;
+        machine.stack_push(Value::number(6.0))?;
+        machine.stack_push(Value::number(3.0))?;
         machine.run()?;
-        assert_eq!(machine.stack_pop().ok(), Some(2.0));
+        assert_eq!(machine.stack_pop().unwrap().to_number(), Some(2.0));
         Ok(())
     }
 
@@ -169,12 +177,12 @@ mod test {
     fn operation_constant() -> MachineResult<()> {
         let mut chunk = Chunk::new();
         chunk.write_opcode(crate::vm::OpCode::Constant, 1);
-        chunk.add_constant(2.0);
-        let idx = chunk.add_constant(10.0);
+        chunk.add_constant(Value::number(2.0));
+        let idx = chunk.add_constant(Value::number(10.0));
         chunk.write_u8(idx as u8, 1);
         let mut machine = Machine::with(chunk);
         machine.run()?;
-        assert_eq!(machine.stack_pop().ok(), Some(10.0));
+        assert_eq!(machine.stack_pop().unwrap().to_number(), Some(10.0));
         Ok(())
     }
 }

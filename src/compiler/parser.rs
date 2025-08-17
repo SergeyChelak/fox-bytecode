@@ -1,10 +1,11 @@
 use crate::{
-    chunk::{Chunk, Value},
+    chunk::Chunk,
     compiler::{
         scanner::TokenSource,
         token::{Token, TokenType},
     },
     utils::ErrorInfo,
+    value::Value,
     vm::Instruction,
 };
 
@@ -120,8 +121,8 @@ impl Parser {
         let value = self
             .previous
             .as_ref()
-            .and_then(|token| token.text.parse::<Value>().ok())
-            .unwrap_or_default();
+            .and_then(|token| Value::number_from(&token.text).ok())
+            .unwrap_or(Value::number(0.0));
         self.emit_constant(value)
     }
 
@@ -289,7 +290,7 @@ mod test_parser {
     fn unary_chunk() {
         let input = vec![Token::minus(), Token::number("12.345")];
         let expectation = Expectation {
-            constants: vec![12.345],
+            constants: vec![Value::number(12.345)],
             instructions: vec![Instruction::Constant(0), Instruction::Negate],
         };
         state_expectation_test(input, expectation);
@@ -306,7 +307,7 @@ mod test_parser {
         for (token, expected_instr) in data {
             let input = vec![Token::number("3"), token, Token::number("5.0")];
             let expectation = Expectation {
-                constants: vec![3.0, 5.0],
+                constants: vec![Value::number(3.0), Value::number(5.0)],
                 instructions: vec![
                     Instruction::Constant(0),
                     Instruction::Constant(1),
@@ -331,7 +332,7 @@ mod test_parser {
         ];
 
         let expectation = Expectation {
-            constants: vec![3.0, 5.0, 7.0],
+            constants: vec![Value::number(3.0), Value::number(5.0), Value::number(7.0)],
             instructions: vec![
                 Instruction::Constant(0),
                 Instruction::Constant(1),
