@@ -158,59 +158,148 @@ mod test {
     fn operation_negate() -> MachineResult<()> {
         let mut chunk = Chunk::new();
         chunk.write_u8(OPCODE_NEGATE, 1);
-        let mut machine = Machine::with(chunk);
-        machine.stack_push(Value::number(10.0))?;
-        machine.run()?;
-        assert_eq!(machine.stack_pop().unwrap().as_number(), Some(-10.0));
+        machine_test(chunk, &[Value::number(10.0)], &[Value::number(-10.0)])
+    }
+
+    #[test]
+    fn operation_equal() -> MachineResult<()> {
+        let make_chunk = || {
+            let mut chunk = Chunk::new();
+            chunk.write_u8(OPCODE_EQUAL, 1);
+            chunk
+        };
+        machine_test(
+            make_chunk(),
+            &[Value::number(2.0), Value::number(2.0)],
+            &[Value::Bool(true)],
+        )?;
+        machine_test(
+            make_chunk(),
+            &[Value::number(3.0), Value::number(2.0)],
+            &[Value::Bool(false)],
+        )?;
+        machine_test(
+            make_chunk(),
+            &[Value::Bool(false), Value::Bool(false)],
+            &[Value::Bool(true)],
+        )?;
+        machine_test(
+            make_chunk(),
+            &[Value::Nil, Value::Nil],
+            &[Value::Bool(true)],
+        )?;
+        machine_test(
+            make_chunk(),
+            &[Value::Bool(false), Value::Nil],
+            &[Value::Bool(false)],
+        )
+    }
+
+    #[test]
+    fn operation_greater() -> MachineResult<()> {
+        let make_chunk = || {
+            let mut chunk = Chunk::new();
+            chunk.write_u8(OPCODE_GREATER, 1);
+            chunk
+        };
+        machine_test(
+            make_chunk(),
+            &[Value::number(3.0), Value::number(2.0)],
+            &[Value::Bool(true)],
+        )?;
+        machine_test(
+            make_chunk(),
+            &[Value::number(1.0), Value::number(2.0)],
+            &[Value::Bool(false)],
+        )
+    }
+
+    #[test]
+    fn operation_less() -> MachineResult<()> {
+        let make_chunk = || {
+            let mut chunk = Chunk::new();
+            chunk.write_u8(OPCODE_LESS, 1);
+            chunk
+        };
+        machine_test(
+            make_chunk(),
+            &[Value::number(3.0), Value::number(2.0)],
+            &[Value::Bool(false)],
+        )?;
+        machine_test(
+            make_chunk(),
+            &[Value::number(1.0), Value::number(2.0)],
+            &[Value::Bool(true)],
+        )?;
+
+        let res = machine_test(make_chunk(), &[Value::number(1.0), Value::Bool(true)], &[]);
+        assert!(res.is_err());
         Ok(())
+    }
+
+    #[test]
+    fn operation_nil() -> MachineResult<()> {
+        let mut chunk = Chunk::new();
+        chunk.write_u8(OPCODE_NIL, 1);
+        machine_test(chunk, &[], &[Value::Nil])
+    }
+
+    #[test]
+    fn operation_true() -> MachineResult<()> {
+        let mut chunk = Chunk::new();
+        chunk.write_u8(OPCODE_TRUE, 1);
+        machine_test(chunk, &[], &[Value::Bool(true)])
+    }
+
+    #[test]
+    fn operation_false() -> MachineResult<()> {
+        let mut chunk = Chunk::new();
+        chunk.write_u8(OPCODE_FALSE, 1);
+        machine_test(chunk, &[], &[Value::Bool(false)])
     }
 
     #[test]
     fn operation_add() -> MachineResult<()> {
         let mut chunk = Chunk::new();
         chunk.write_u8(OPCODE_ADD, 1);
-        let mut machine = Machine::with(chunk);
-        machine.stack_push(Value::number(2.0))?;
-        machine.stack_push(Value::number(3.0))?;
-        machine.run()?;
-        assert_eq!(machine.stack_pop().unwrap().as_number(), Some(5.0));
-        Ok(())
+        machine_test(
+            chunk,
+            &[Value::number(2.0), Value::number(3.0)],
+            &[Value::number(5.0)],
+        )
     }
 
     #[test]
     fn operation_sub() -> MachineResult<()> {
         let mut chunk = Chunk::new();
         chunk.write_u8(OPCODE_SUBTRACT, 1);
-        let mut machine = Machine::with(chunk);
-        machine.stack_push(Value::number(2.0))?;
-        machine.stack_push(Value::number(3.0))?;
-        machine.run()?;
-        assert_eq!(machine.stack_pop().unwrap().as_number(), Some(-1.0));
-        Ok(())
+        machine_test(
+            chunk,
+            &[Value::number(2.0), Value::number(3.0)],
+            &[Value::number(-1.0)],
+        )
     }
 
     #[test]
     fn operation_mul() -> MachineResult<()> {
         let mut chunk = Chunk::new();
         chunk.write_u8(OPCODE_MULTIPLY, 1);
-        let mut machine = Machine::with(chunk);
-        machine.stack_push(Value::number(2.0))?;
-        machine.stack_push(Value::number(3.0))?;
-        machine.run()?;
-        assert_eq!(machine.stack_pop().unwrap().as_number(), Some(6.0));
-        Ok(())
+        machine_test(
+            chunk,
+            &[Value::number(2.0), Value::number(3.0)],
+            &[Value::number(6.0)],
+        )
     }
 
     #[test]
     fn operation_div() -> MachineResult<()> {
         let mut chunk = Chunk::new();
         chunk.write_u8(OPCODE_DIVIDE, 1);
-        let mut machine = Machine::with(chunk);
-        machine.stack_push(Value::number(6.0))?;
-        machine.stack_push(Value::number(3.0))?;
-        machine.run()?;
-        assert_eq!(machine.stack_pop().unwrap().as_number(), Some(2.0));
-        Ok(())
+        machine_test(
+            chunk,
+            &[Value::number(6.0), Value::number(3.0)],
+            &[Value::number(2.0)],
+        )
     }
 
     #[test]
@@ -223,6 +312,20 @@ mod test {
         let mut machine = Machine::with(chunk);
         machine.run()?;
         assert_eq!(machine.stack_pop().unwrap().as_number(), Some(10.0));
+        Ok(())
+    }
+
+    fn machine_test(chunk: Chunk, stack_in: &[Value], stack_out: &[Value]) -> MachineResult<()> {
+        let mut machine = Machine::with(chunk);
+        for v_in in stack_in {
+            machine.stack_push(*v_in)?;
+        }
+        machine.run()?;
+        for v_out in stack_out.iter().rev() {
+            let val = machine.stack_pop()?;
+            assert_eq!(val, *v_out);
+        }
+        assert_eq!(machine.stack_top, 0);
         Ok(())
     }
 }
