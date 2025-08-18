@@ -141,14 +141,31 @@ mod test {
     }
 
     #[test]
-    fn instruction_fetch_return() {
-        let buffer = [OPCODE_RETURN];
+    fn instruction_fetch_single_byte_size() {
+        let data = [
+            (OPCODE_NIL, Instruction::Nil),
+            (OPCODE_TRUE, Instruction::True),
+            (OPCODE_FALSE, Instruction::False),
+            (OPCODE_NEGATE, Instruction::Negate),
+            (OPCODE_ADD, Instruction::Add),
+            (OPCODE_SUBTRACT, Instruction::Subtract),
+            (OPCODE_MULTIPLY, Instruction::Multiply),
+            (OPCODE_DIVIDE, Instruction::Divide),
+            (OPCODE_RETURN, Instruction::Return),
+            (OPCODE_NOT, Instruction::Not),
+            (OPCODE_LESS, Instruction::Less),
+            (OPCODE_GREATER, Instruction::Greater),
+            (OPCODE_EQUAL, Instruction::Equal),
+        ];
+        let buffer = data.iter().map(|(opcode, _)| *opcode).collect::<Vec<_>>();
         let mut offset = 0;
-        let instr = Instruction::fetch(&buffer, &mut offset);
-        assert!(instr.is_ok());
-        assert_eq!(offset, 1);
-        let instr = instr.unwrap();
-        assert!(matches!(instr, Instruction::Return))
+        while offset < buffer.len() {
+            let expected = &data[offset];
+            let instr = Instruction::fetch(&buffer, &mut offset);
+            assert!(instr.is_ok());
+            let instr = instr.unwrap();
+            assert_eq!(instr, expected.1);
+        }
     }
 
     #[test]
