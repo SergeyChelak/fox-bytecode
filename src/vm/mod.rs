@@ -1,5 +1,5 @@
-mod opcode;
-pub use opcode::*;
+mod instruction;
+pub use instruction::*;
 
 mod machine;
 pub use machine::Machine;
