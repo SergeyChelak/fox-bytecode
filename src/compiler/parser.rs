@@ -112,7 +112,7 @@ impl Parser {
     }
 
     fn emit_return(&mut self) {
-        self.emit_instruction(Instruction::Return)
+        self.emit_instruction(&Instruction::Return)
     }
 
     fn number(&mut self) {
@@ -138,8 +138,10 @@ impl Parser {
         self.parse_precedence(Precedence::Unary);
 
         // Emit the operator instruction
-        if matches!(operator_type, TokenType::Minus) {
-            self.emit_instruction(Instruction::Negate)
+        match operator_type {
+            TokenType::Minus => self.emit_instruction(&Instruction::Negate),
+            TokenType::Bang => self.emit_instruction(&Instruction::Not),
+            _ => unreachable!("unary"),
         }
     }
 
@@ -148,21 +150,27 @@ impl Parser {
         let rule = self.get_rule(operator_type);
         self.parse_precedence(rule.precedence.increased());
 
-        let inst = match operator_type {
-            TokenType::Plus => Instruction::Add,
-            TokenType::Minus => Instruction::Subtract,
-            TokenType::Star => Instruction::Multiply,
-            TokenType::Slash => Instruction::Divide,
+        let array: &[Instruction] = match operator_type {
+            TokenType::BangEqual => &[Instruction::Equal, Instruction::Not],
+            TokenType::EqualEqual => &[Instruction::Equal],
+            TokenType::Greater => &[Instruction::Greater],
+            TokenType::GreaterEqual => &[Instruction::Less, Instruction::Not],
+            TokenType::Less => &[Instruction::Less],
+            TokenType::LessEqual => &[Instruction::Greater, Instruction::Not],
+            TokenType::Plus => &[Instruction::Add],
+            TokenType::Minus => &[Instruction::Subtract],
+            TokenType::Star => &[Instruction::Multiply],
+            TokenType::Slash => &[Instruction::Divide],
             x => unreachable!("Unexpected binary operator {x:?}"),
         };
-        self.emit_instruction(inst);
+        self.emit_instructions(array);
     }
 
     fn literal(&mut self) {
         match self.prev_token_type() {
-            TokenType::False => self.emit_instruction(Instruction::False),
-            TokenType::True => self.emit_instruction(Instruction::True),
-            TokenType::Nil => self.emit_instruction(Instruction::Nil),
+            TokenType::False => self.emit_instruction(&Instruction::False),
+            TokenType::True => self.emit_instruction(&Instruction::True),
+            TokenType::Nil => self.emit_instruction(&Instruction::Nil),
             _ => unreachable!("literal"),
         }
     }
@@ -190,13 +198,18 @@ impl Parser {
             Slash | Star => ParseRule::new(None, Some(Self::binary), Precedence::Factor),
             Number => ParseRule::new(Some(Self::number), None, Precedence::None),
             Nil | False | True => ParseRule::new(Some(Self::literal), None, Precedence::None),
+            Bang => ParseRule::new(Some(Self::unary), None, Precedence::None),
+            BangEqual => ParseRule::new(None, Some(Self::binary), Precedence::Equality),
+            Greater | GreaterEqual | Less | LessEqual => {
+                ParseRule::new(None, Some(Self::binary), Precedence::Comparison)
+            }
             _ => Default::default(),
         }
     }
 
     fn emit_constant(&mut self, value: Value) {
         let idx = self.make_constant(value);
-        self.emit_instruction(Instruction::Constant(idx));
+        self.emit_instruction(&Instruction::Constant(idx));
     }
 
     fn make_constant(&mut self, value: Value) -> u8 {
@@ -211,16 +224,22 @@ impl Parser {
         idx as u8
     }
 
-    fn emit_instruction(&mut self, instruction: Instruction) {
+    fn emit_instruction(&mut self, instruction: &Instruction) {
         let line = self
             .previous
             .as_ref()
             .map(|x| x.position.line)
             .unwrap_or_default();
-        let bytes: Vec<u8> = instruction.into();
+        let bytes: Vec<u8> = instruction.as_vec();
         for byte in bytes.into_iter() {
             self.chunk.write_u8(byte, line);
         }
+    }
+
+    fn emit_instructions(&mut self, instruction: &[Instruction]) {
+        instruction
+            .iter()
+            .for_each(|inst| self.emit_instruction(inst));
     }
 }
 

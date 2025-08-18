@@ -53,4 +53,12 @@ impl Value {
             _ => None,
         }
     }
+
+    pub fn as_bool(&self) -> bool {
+        match self {
+            Value::Nil => false,
+            Value::Bool(value) => *value,
+            _ => true,
+        }
+    }
 }

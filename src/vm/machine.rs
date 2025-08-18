@@ -66,19 +66,30 @@ impl Machine {
                     let value = self.read_const(index)?;
                     self.stack_push(value)?;
                 }
+                Instruction::Equal => {
+                    let b = self.stack_pop()?;
+                    let a = self.stack_pop()?;
+                    self.stack_push(Value::Bool(a == b))?;
+                }
+                Instruction::Greater => self.do_binary(|a, b| Value::Bool(a > b))?,
+                Instruction::Less => self.do_binary(|a, b| Value::Bool(a < b))?,
                 Instruction::Nil => self.stack_push(Value::Nil)?,
                 Instruction::True => self.stack_push(Value::Bool(true))?,
                 Instruction::False => self.stack_push(Value::Bool(false))?,
-                Instruction::Add => self.do_binary(|a, b| a + b)?,
-                Instruction::Subtract => self.do_binary(|a, b| a - b)?,
-                Instruction::Multiply => self.do_binary(|a, b| a * b)?,
-                Instruction::Divide => self.do_binary(|a, b| a / b)?,
+                Instruction::Add => self.do_binary(|a, b| Value::number(a + b))?,
+                Instruction::Subtract => self.do_binary(|a, b| Value::number(a - b))?,
+                Instruction::Multiply => self.do_binary(|a, b| Value::number(a * b))?,
+                Instruction::Divide => self.do_binary(|a, b| Value::number(a / b))?,
                 Instruction::Negate => {
                     let value = self.stack_pop()?;
                     let Some(value) = value.as_number() else {
                         return Err(self.runtime_error("Operand must be a number"));
                     };
                     self.stack_push(Value::number(-value))?;
+                }
+                Instruction::Not => {
+                    let value = self.stack_pop()?;
+                    self.stack_push(Value::Bool(!value.as_bool()))?;
                 }
                 Instruction::Return => {
                     let value = self.stack_pop()?;
@@ -90,14 +101,14 @@ impl Machine {
         Ok(())
     }
 
-    fn do_binary(&mut self, operation: fn(Double, Double) -> Double) -> MachineResult<()> {
+    fn do_binary(&mut self, operation: fn(Double, Double) -> Value) -> MachineResult<()> {
         let b = self.stack_pop()?;
         let a = self.stack_pop()?;
         let (Some(a), Some(b)) = (a.as_number(), b.as_number()) else {
             return Err(self.runtime_error("Operands must be numbers"));
         };
         let val = operation(a, b);
-        self.stack_push(Value::number(val))
+        self.stack_push(val)
     }
 
     fn read_const(&self, index: u8) -> MachineResult<Value> {

@@ -10,10 +10,17 @@ pub const OPCODE_SUBTRACT: u8 = 6;
 pub const OPCODE_MULTIPLY: u8 = 7;
 pub const OPCODE_DIVIDE: u8 = 8;
 pub const OPCODE_RETURN: u8 = 9;
+pub const OPCODE_NOT: u8 = 10;
+pub const OPCODE_LESS: u8 = 11;
+pub const OPCODE_GREATER: u8 = 12;
+pub const OPCODE_EQUAL: u8 = 13;
 
 #[derive(Debug, PartialEq)]
 pub enum Instruction {
     Constant(u8),
+    Equal,
+    Greater,
+    Less,
     Nil,
     True,
     False,
@@ -22,6 +29,7 @@ pub enum Instruction {
     Subtract,
     Multiply,
     Divide,
+    Not,
     Return,
 }
 
@@ -29,6 +37,9 @@ impl Display for Instruction {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Instruction::Constant(x) => write!(f, "const {x}"),
+            Instruction::Equal => write!(f, "eq"),
+            Instruction::Greater => write!(f, "greater"),
+            Instruction::Less => write!(f, "less"),
             Instruction::Nil => write!(f, "nil"),
             Instruction::True => write!(f, "true"),
             Instruction::False => write!(f, "false"),
@@ -37,6 +48,7 @@ impl Display for Instruction {
             Instruction::Subtract => write!(f, "subtract"),
             Instruction::Multiply => write!(f, "multiply"),
             Instruction::Divide => write!(f, "divide"),
+            Instruction::Not => write!(f, "not"),
             Instruction::Return => write!(f, "return"),
         }
     }
@@ -59,11 +71,13 @@ impl Display for FetchError {
     }
 }
 
-#[allow(clippy::from_over_into)]
-impl Into<Vec<u8>> for Instruction {
-    fn into(self) -> Vec<u8> {
+pub type FetchResult<T> = Result<T, FetchError>;
+
+impl Instruction {
+    pub fn as_vec(&self) -> Vec<u8> {
         match self {
-            Instruction::Constant(val) => vec![OPCODE_CONSTANT, val],
+            Instruction::Constant(val) => vec![OPCODE_CONSTANT, *val],
+            Instruction::Equal => vec![OPCODE_EQUAL],
             Instruction::Nil => vec![OPCODE_NIL],
             Instruction::True => vec![OPCODE_TRUE],
             Instruction::False => vec![OPCODE_FALSE],
@@ -72,14 +86,13 @@ impl Into<Vec<u8>> for Instruction {
             Instruction::Subtract => vec![OPCODE_SUBTRACT],
             Instruction::Multiply => vec![OPCODE_MULTIPLY],
             Instruction::Divide => vec![OPCODE_DIVIDE],
+            Instruction::Not => vec![OPCODE_NOT],
             Instruction::Return => vec![OPCODE_RETURN],
+            Instruction::Greater => vec![OPCODE_GREATER],
+            Instruction::Less => vec![OPCODE_LESS],
         }
     }
-}
 
-pub type FetchResult<T> = Result<T, FetchError>;
-
-impl Instruction {
     pub fn fetch(buffer: &[u8], offset: &mut usize) -> FetchResult<Self> {
         let byte = consume(buffer, offset).ok_or(FetchError::End)?;
         match byte {
@@ -87,6 +100,9 @@ impl Instruction {
                 let arg1 = consume(buffer, offset).ok_or(FetchError::Broken)?;
                 Ok(Instruction::Constant(arg1))
             }
+            OPCODE_EQUAL => Ok(Instruction::Equal),
+            OPCODE_GREATER => Ok(Instruction::Greater),
+            OPCODE_LESS => Ok(Instruction::Less),
             OPCODE_NEGATE => Ok(Instruction::Negate),
 
             OPCODE_NIL => Ok(Instruction::Nil),
@@ -97,6 +113,8 @@ impl Instruction {
             OPCODE_SUBTRACT => Ok(Instruction::Subtract),
             OPCODE_MULTIPLY => Ok(Instruction::Multiply),
             OPCODE_DIVIDE => Ok(Instruction::Divide),
+
+            OPCODE_NOT => Ok(Instruction::Not),
 
             OPCODE_RETURN => Ok(Instruction::Return),
             x => Err(FetchError::Unknown(x)),
