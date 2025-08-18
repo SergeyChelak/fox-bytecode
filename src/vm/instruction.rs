@@ -15,7 +15,7 @@ pub const OPCODE_LESS: u8 = 11;
 pub const OPCODE_GREATER: u8 = 12;
 pub const OPCODE_EQUAL: u8 = 13;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Instruction {
     Constant(u8),
     Equal,

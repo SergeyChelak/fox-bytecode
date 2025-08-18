@@ -199,7 +199,9 @@ impl Parser {
             Number => ParseRule::new(Some(Self::number), None, Precedence::None),
             Nil | False | True => ParseRule::new(Some(Self::literal), None, Precedence::None),
             Bang => ParseRule::new(Some(Self::unary), None, Precedence::None),
-            BangEqual => ParseRule::new(None, Some(Self::binary), Precedence::Equality),
+            EqualEqual | BangEqual => {
+                ParseRule::new(None, Some(Self::binary), Precedence::Equality)
+            }
             Greater | GreaterEqual | Less | LessEqual => {
                 ParseRule::new(None, Some(Self::binary), Precedence::Comparison)
             }
@@ -316,7 +318,7 @@ mod test_parser {
     use crate::utils::CodePosition;
 
     #[test]
-    fn unary_chunk() {
+    fn emit_unary_chunk() {
         let input = vec![Token::minus(), Token::number("12.345")];
         let expectation = Expectation {
             constants: vec![Value::number(12.345)],
@@ -326,29 +328,67 @@ mod test_parser {
     }
 
     #[test]
-    fn binary_chunk() {
+    fn emit_binary_chunk() {
         let data = [
-            (Token::minus(), Instruction::Subtract),
-            (Token::plus(), Instruction::Add),
-            (Token::multiply(), Instruction::Multiply),
-            (Token::divide(), Instruction::Divide),
+            (
+                Token::make(TokenType::BangEqual, "!="),
+                vec![Instruction::Equal, Instruction::Not],
+            ),
+            (
+                Token::make(TokenType::EqualEqual, "=="),
+                vec![Instruction::Equal],
+            ),
+            (
+                Token::make(TokenType::Greater, ">"),
+                vec![Instruction::Greater],
+            ),
+            (
+                Token::make(TokenType::GreaterEqual, ">="),
+                vec![Instruction::Less, Instruction::Not],
+            ),
+            (Token::make(TokenType::Less, "<"), vec![Instruction::Less]),
+            (
+                Token::make(TokenType::LessEqual, "<="),
+                vec![Instruction::Greater, Instruction::Not],
+            ),
+            (Token::minus(), vec![Instruction::Subtract]),
+            (Token::plus(), vec![Instruction::Add]),
+            (Token::multiply(), vec![Instruction::Multiply]),
+            (Token::divide(), vec![Instruction::Divide]),
         ];
         for (token, expected_instr) in data {
             let input = vec![Token::number("3"), token, Token::number("5.0")];
+            let mut instructions = vec![Instruction::Constant(0), Instruction::Constant(1)];
+
+            for exp_instr in expected_instr {
+                instructions.push(exp_instr.clone());
+            }
             let expectation = Expectation {
                 constants: vec![Value::number(3.0), Value::number(5.0)],
-                instructions: vec![
-                    Instruction::Constant(0),
-                    Instruction::Constant(1),
-                    expected_instr,
-                ],
+                instructions,
             };
             state_expectation_test(input, expectation);
         }
     }
 
     #[test]
-    fn grouping_chunk() {
+    fn emit_literal_chunk() {
+        let tokens = vec![
+            (Token::make(TokenType::False, "false"), Instruction::False),
+            (Token::make(TokenType::True, "true"), Instruction::True),
+            (Token::make(TokenType::Nil, "nil"), Instruction::Nil),
+        ];
+        for (token, emitted) in tokens {
+            let expectation = Expectation {
+                constants: Vec::new(),
+                instructions: vec![emitted],
+            };
+            state_expectation_test(vec![token], expectation);
+        }
+    }
+
+    #[test]
+    fn emit_grouping_chunk() {
         // 3 * (5 + 7)
         let input = vec![
             Token::number("3"),
@@ -378,7 +418,10 @@ mod test_parser {
         let mock = ScannerMock::new(input);
         let mut parser = Parser::with(Box::new(mock));
         let res = parser.compile();
-        assert!(res.is_ok());
+        if let Err(err) = res {
+            panic!("{:?}", err);
+        }
+        // assert!(res.is_ok());
 
         let chunk = parser.chunk;
         for (i, x) in expectation.constants.iter().enumerate() {
