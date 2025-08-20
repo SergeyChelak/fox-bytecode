@@ -283,6 +283,13 @@ mod test {
     }
 
     #[test]
+    fn operation_pop() -> MachineResult<()> {
+        let mut chunk = Chunk::new();
+        chunk.write_u8(OPCODE_POP, 1);
+        machine_test(chunk, &[DataType::Bool(true)], &[])
+    }
+
+    #[test]
     fn operation_add() -> MachineResult<()> {
         let make_chunk = || {
             let mut chunk = Chunk::new();
