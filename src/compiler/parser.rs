@@ -35,18 +35,18 @@ impl Parser {
         while !self.is_match(TokenType::Eof) {
             self.declaration();
         }
-        // self.expression();
-        // self.consume(TokenType::Eof, "Expect end of expression");
         self.end_compiler();
         if !self.errors.is_empty() {
             return Err(self.errors.clone());
         }
         Ok(())
-        // todo!()
     }
 
     fn declaration(&mut self) {
         self.statement();
+        if self.panic_mode {
+            self.synchronize();
+        }
     }
 
     fn statement(&mut self) {
@@ -88,6 +88,28 @@ impl Parser {
             } else {
                 break;
             }
+        }
+    }
+
+    fn synchronize(&mut self) {
+        self.panic_mode = false;
+
+        while !matches!(self.cur_token_type(), TokenType::Eof) {
+            if matches!(self.prev_token_type(), TokenType::Semicolon) {
+                return;
+            }
+            match self.cur_token_type() {
+                TokenType::Class
+                | TokenType::Fun
+                | TokenType::Var
+                | TokenType::For
+                | TokenType::If
+                | TokenType::While
+                | TokenType::Print
+                | TokenType::Return => return,
+                _ => {}
+            }
+            self.advance();
         }
     }
 
