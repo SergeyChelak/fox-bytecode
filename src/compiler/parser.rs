@@ -43,10 +43,18 @@ impl Parser {
     }
 
     fn declaration(&mut self) {
-        self.statement();
+        if self.is_match(TokenType::Var) {
+            self.var_declaration();
+        } else {
+            self.statement();
+        }
         if self.panic_mode {
             self.synchronize();
         }
+    }
+
+    fn var_declaration(&mut self) {
+        todo!()
     }
 
     fn statement(&mut self) {
@@ -239,7 +247,7 @@ impl Parser {
             .map(|t| &t.text)
             .map(|s| &s[1..s.len() - 1])
             .expect("Bug: failed to extract string value");
-        self.emit_constant(DataType::string_from_str(text));
+        self.emit_constant(DataType::text_from_str(text));
     }
 
     fn prev_token_type(&self) -> TokenType {
@@ -499,7 +507,7 @@ mod test_parser {
             Token::semicolon(),
         ];
         let expectation = Expectation {
-            constants: vec![DataType::string_from_str("Text")],
+            constants: vec![DataType::text_from_str("Text")],
             instructions: vec![],
         };
         state_expectation_test(input, expectation);

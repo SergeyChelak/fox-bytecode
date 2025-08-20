@@ -28,7 +28,7 @@ impl Display for DataType {
 }
 
 impl DataType {
-    pub fn string_from_str(value: &str) -> Self {
+    pub fn text_from_str(value: &str) -> Self {
         Self::Text(Rc::new(value.to_string()))
     }
 
@@ -133,9 +133,9 @@ mod test {
     #[test]
     fn equality_text() {
         let text = "abc";
-        let a = DataType::string_from_str(text);
-        let b = DataType::string_from_str(text);
-        let c = DataType::string_from_str("other");
+        let a = DataType::text_from_str(text);
+        let b = DataType::text_from_str(text);
+        let c = DataType::text_from_str("other");
         assert_eq!(a, b);
         assert_ne!(a, c);
 
