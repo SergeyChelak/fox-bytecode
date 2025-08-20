@@ -175,6 +175,16 @@ impl Parser {
         }
     }
 
+    fn string(&mut self) {
+        let text = self
+            .previous
+            .as_ref()
+            .map(|t| &t.text)
+            .map(|s| &s[1..s.len() - 1])
+            .expect("Bug: failed to extract string value");
+        self.emit_constant(DataType::str_text(text));
+    }
+
     fn prev_token_type(&self) -> TokenType {
         self.previous
             .as_ref()
@@ -205,6 +215,7 @@ impl Parser {
             Greater | GreaterEqual | Less | LessEqual => {
                 ParseRule::new(None, Some(Self::binary), Precedence::Comparison)
             }
+            TokenType::String => ParseRule::new(Some(Self::string), None, Precedence::None),
             _ => Default::default(),
         }
     }
@@ -418,6 +429,16 @@ mod test_parser {
         state_expectation_test(input, expectation);
     }
 
+    #[test]
+    fn emit_string_constant() {
+        let input = vec![Token::make(TokenType::String, "\"Text\"")];
+        let expectation = Expectation {
+            constants: vec![DataType::str_text("Text")],
+            instructions: vec![],
+        };
+        state_expectation_test(input, expectation);
+    }
+
     fn state_expectation_test(input: Vec<Token>, expectation: Expectation) {
         let mock = ScannerMock::new(input);
         let mut parser = Parser::with(Box::new(mock));
@@ -429,7 +450,7 @@ mod test_parser {
 
         let chunk = parser.chunk;
         for (i, x) in expectation.constants.iter().enumerate() {
-            assert_eq!(chunk.read_const(i as u8), Some(*x));
+            assert_eq!(chunk.read_const(i as u8), Some(x.clone()));
         }
 
         let mut offset = 0;
