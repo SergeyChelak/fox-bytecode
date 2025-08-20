@@ -197,6 +197,16 @@ mod test {
             make_chunk(),
             &[DataType::Bool(false), DataType::Nil],
             &[DataType::Bool(false)],
+        )?;
+        machine_test(
+            make_chunk(),
+            &[DataType::str_text("abc"), DataType::str_text("abc")],
+            &[DataType::Bool(true)],
+        )?;
+        machine_test(
+            make_chunk(),
+            &[DataType::str_text("abc"), DataType::str_text("abcd")],
+            &[DataType::Bool(false)],
         )
     }
 
@@ -269,12 +279,20 @@ mod test {
 
     #[test]
     fn operation_add() -> MachineResult<()> {
-        let mut chunk = Chunk::new();
-        chunk.write_u8(OPCODE_ADD, 1);
+        let make_chunk = || {
+            let mut chunk = Chunk::new();
+            chunk.write_u8(OPCODE_ADD, 1);
+            chunk
+        };
         machine_test(
-            chunk,
+            make_chunk(),
             &[DataType::number(2.0), DataType::number(3.0)],
             &[DataType::number(5.0)],
+        )?;
+        machine_test(
+            make_chunk(),
+            &[DataType::str_text("first"), DataType::str_text("_second")],
+            &[DataType::str_text("first_second")],
         )
     }
 
