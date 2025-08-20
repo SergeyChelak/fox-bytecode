@@ -32,14 +32,49 @@ impl Parser {
 
     pub fn compile(&mut self) -> Result<(), Vec<ErrorInfo>> {
         self.advance();
-        self.expression();
-        self.consume(TokenType::Eof, "Expect end of expression");
+        while !self.is_match(TokenType::Eof) {
+            self.declaration();
+        }
+        // self.expression();
+        // self.consume(TokenType::Eof, "Expect end of expression");
         self.end_compiler();
         if !self.errors.is_empty() {
             return Err(self.errors.clone());
         }
         Ok(())
         // todo!()
+    }
+
+    fn declaration(&mut self) {
+        self.statement();
+    }
+
+    fn statement(&mut self) {
+        if self.is_match(TokenType::Print) {
+            self.print_statement();
+        } else {
+            self.expression_statement();
+        }
+    }
+
+    fn expression_statement(&mut self) {
+        self.expression();
+        self.consume(TokenType::Semicolon, "Expect ';' after value");
+        self.emit_instruction(&Instruction::Pop);
+    }
+
+    fn print_statement(&mut self) {
+        self.expression();
+        self.consume(TokenType::Semicolon, "Expect ';' after value");
+        self.emit_instruction(&Instruction::Print);
+    }
+
+    fn is_match(&mut self, t_type: TokenType) -> bool {
+        if self.cur_token_type() != t_type {
+            return false;
+        }
+        self.advance();
+        true
     }
 
     fn advance(&mut self) {
@@ -182,7 +217,7 @@ impl Parser {
             .map(|t| &t.text)
             .map(|s| &s[1..s.len() - 1])
             .expect("Bug: failed to extract string value");
-        self.emit_constant(DataType::str_text(text));
+        self.emit_constant(DataType::string_from_str(text));
     }
 
     fn prev_token_type(&self) -> TokenType {
@@ -330,7 +365,7 @@ mod test_parser {
 
     #[test]
     fn emit_unary_chunk() {
-        let input = vec![Token::minus(), Token::number("12.345")];
+        let input = vec![Token::minus(), Token::number("12.345"), Token::semicolon()];
         let expectation = Expectation {
             constants: vec![DataType::number(12.345)],
             instructions: vec![Instruction::Constant(0), Instruction::Negate],
@@ -368,7 +403,12 @@ mod test_parser {
             (Token::divide(), vec![Instruction::Divide]),
         ];
         for (token, expected_instr) in data {
-            let input = vec![Token::number("3"), token, Token::number("5.0")];
+            let input = vec![
+                Token::number("3"),
+                token,
+                Token::number("5.0"),
+                Token::semicolon(),
+            ];
             let mut instructions = vec![Instruction::Constant(0), Instruction::Constant(1)];
 
             for exp_instr in expected_instr {
@@ -394,7 +434,7 @@ mod test_parser {
                 constants: Vec::new(),
                 instructions: vec![emitted],
             };
-            state_expectation_test(vec![token], expectation);
+            state_expectation_test(vec![token, Token::semicolon()], expectation);
         }
     }
 
@@ -409,6 +449,7 @@ mod test_parser {
             Token::plus(),
             Token::number("7"),
             Token::with_type(TokenType::RightParenthesis),
+            Token::semicolon(),
         ];
 
         let expectation = Expectation {
@@ -431,9 +472,12 @@ mod test_parser {
 
     #[test]
     fn emit_string_constant() {
-        let input = vec![Token::make(TokenType::String, "\"Text\"")];
+        let input = vec![
+            Token::make(TokenType::String, "\"Text\""),
+            Token::semicolon(),
+        ];
         let expectation = Expectation {
-            constants: vec![DataType::str_text("Text")],
+            constants: vec![DataType::string_from_str("Text")],
             instructions: vec![],
         };
         state_expectation_test(input, expectation);
@@ -511,6 +555,10 @@ mod test_parser {
 
         fn divide() -> Self {
             Self::make(TokenType::Slash, "/")
+        }
+
+        fn semicolon() -> Self {
+            Self::make(TokenType::Semicolon, ";")
         }
 
         fn with_type(t_type: TokenType) -> Self {

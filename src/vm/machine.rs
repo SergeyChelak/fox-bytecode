@@ -85,10 +85,17 @@ impl Machine {
                     let value = self.stack_pop()?;
                     self.stack_push(DataType::Bool(!value.as_bool()))?;
                 }
+                Instruction::Print => {
+                    let value = self.stack_pop()?;
+                    println!("{value}");
+                }
                 Instruction::Return => {
                     let value = self.stack_pop()?;
                     println!("{value}");
                     break 'run_loop;
+                }
+                Instruction::Pop => {
+                    self.stack_pop()?;
                 }
             }
         }
@@ -192,12 +199,18 @@ mod test {
         )?;
         machine_test(
             make_chunk(),
-            &[DataType::str_text("abc"), DataType::str_text("abc")],
+            &[
+                DataType::string_from_str("abc"),
+                DataType::string_from_str("abc"),
+            ],
             &[DataType::Bool(true)],
         )?;
         machine_test(
             make_chunk(),
-            &[DataType::str_text("abc"), DataType::str_text("abcd")],
+            &[
+                DataType::string_from_str("abc"),
+                DataType::string_from_str("abcd"),
+            ],
             &[DataType::Bool(false)],
         )
     }
@@ -283,8 +296,11 @@ mod test {
         )?;
         machine_test(
             make_chunk(),
-            &[DataType::str_text("first"), DataType::str_text("_second")],
-            &[DataType::str_text("first_second")],
+            &[
+                DataType::string_from_str("first"),
+                DataType::string_from_str("_second"),
+            ],
+            &[DataType::string_from_str("first_second")],
         )
     }
 

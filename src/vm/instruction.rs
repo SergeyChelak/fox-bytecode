@@ -14,6 +14,8 @@ pub const OPCODE_NOT: u8 = 10;
 pub const OPCODE_LESS: u8 = 11;
 pub const OPCODE_GREATER: u8 = 12;
 pub const OPCODE_EQUAL: u8 = 13;
+pub const OPCODE_PRINT: u8 = 14;
+pub const OPCODE_POP: u8 = 15;
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Instruction {
@@ -30,7 +32,9 @@ pub enum Instruction {
     Multiply,
     Divide,
     Not,
+    Print,
     Return,
+    Pop,
 }
 
 impl Display for Instruction {
@@ -49,7 +53,9 @@ impl Display for Instruction {
             Instruction::Multiply => write!(f, "multiply"),
             Instruction::Divide => write!(f, "divide"),
             Instruction::Not => write!(f, "not"),
+            Instruction::Print => write!(f, "print"),
             Instruction::Return => write!(f, "return"),
+            Instruction::Pop => write!(f, "pop"),
         }
     }
 }
@@ -90,6 +96,8 @@ impl Instruction {
             Instruction::Return => vec![OPCODE_RETURN],
             Instruction::Greater => vec![OPCODE_GREATER],
             Instruction::Less => vec![OPCODE_LESS],
+            Instruction::Print => vec![OPCODE_PRINT],
+            Instruction::Pop => vec![OPCODE_POP],
         }
     }
 
@@ -116,7 +124,10 @@ impl Instruction {
 
             OPCODE_NOT => Ok(Instruction::Not),
 
+            OPCODE_PRINT => Ok(Instruction::Print),
             OPCODE_RETURN => Ok(Instruction::Return),
+
+            OPCODE_POP => Ok(Instruction::Pop),
             x => Err(FetchError::Unknown(x)),
         }
     }

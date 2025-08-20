@@ -1,4 +1,4 @@
-use std::{fmt::Display, num::ParseFloatError};
+use std::{fmt::Display, num::ParseFloatError, rc::Rc};
 
 pub type Double = f32;
 
@@ -7,7 +7,7 @@ pub enum DataType {
     Nil,
     Number(Double),
     Bool(bool),
-    Text(String),
+    Text(Rc<String>),
 }
 
 impl Default for DataType {
@@ -28,8 +28,12 @@ impl Display for DataType {
 }
 
 impl DataType {
-    pub fn str_text(value: &str) -> Self {
-        Self::Text(value.to_string())
+    pub fn string_from_str(value: &str) -> Self {
+        Self::Text(Rc::new(value.to_string()))
+    }
+
+    pub fn text_from_string(value: String) -> Self {
+        Self::Text(Rc::new(value))
     }
 
     pub fn number(value: Double) -> Self {
@@ -73,7 +77,7 @@ impl DataType {
                 let mut res = String::new();
                 res.push_str(x.as_str());
                 res.push_str(y.as_str());
-                Ok(DataType::Text(res))
+                Ok(DataType::text_from_string(res))
             }
             _ => Err(OperationError::TypeMismatch),
         }
@@ -129,9 +133,9 @@ mod test {
     #[test]
     fn equality_text() {
         let text = "abc";
-        let a = DataType::str_text(text);
-        let b = DataType::str_text(text);
-        let c = DataType::str_text("other");
+        let a = DataType::string_from_str(text);
+        let b = DataType::string_from_str(text);
+        let c = DataType::string_from_str("other");
         assert_eq!(a, b);
         assert_ne!(a, c);
 
