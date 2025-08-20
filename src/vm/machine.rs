@@ -136,14 +136,6 @@ impl Machine {
         Ok(value)
     }
 
-    // fn stack_peek(&self, depth: usize) -> Option<DataType> {
-    //     let len = self.stack.len();
-    //     if len - 1 < depth {
-    //         return None;
-    //     }
-    //     self.stack.get(len - 1 - depth).cloned()
-    // }
-
     fn runtime_error<T: AsRef<str>>(&self, message: T) -> MachineError {
         let idx = self.ip - 1;
         let line_number = self.chunk.line_number(idx);
@@ -341,20 +333,6 @@ mod test {
         assert_eq!(machine.stack_pop().unwrap().as_number(), Some(10.0));
         Ok(())
     }
-
-    // #[test]
-    // fn stack_peek() -> MachineResult<()> {
-    //     let chunk = Chunk::new();
-    //     let mut machine = Machine::with(chunk);
-    //     machine.stack_push(DataType::Number(1.0))?;
-    //     machine.stack_push(DataType::Number(2.0))?;
-
-    //     assert_eq!(machine.stack_peek(0).unwrap(), DataType::Number(2.0));
-    //     assert_eq!(machine.stack_peek(1).unwrap(), DataType::Number(1.0));
-
-    //     assert!(machine.stack_peek(3).is_none());
-    //     Ok(())
-    // }
 
     fn machine_test(
         chunk: Chunk,
