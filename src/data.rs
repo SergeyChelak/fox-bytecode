@@ -3,29 +3,29 @@ use std::{fmt::Display, num::ParseFloatError};
 pub type Double = f32;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub enum Value {
+pub enum DataType {
     Nil,
     Number(Double),
     Bool(bool),
 }
 
-impl Default for Value {
+impl Default for DataType {
     fn default() -> Self {
         Self::Nil
     }
 }
 
-impl Display for Value {
+impl Display for DataType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Value::Nil => write!(f, "nil"),
-            Value::Bool(val) => write!(f, "{val}"),
-            Value::Number(val) => write!(f, "{val}"),
+            DataType::Nil => write!(f, "nil"),
+            DataType::Bool(val) => write!(f, "{val}"),
+            DataType::Number(val) => write!(f, "{val}"),
         }
     }
 }
 
-impl Value {
+impl DataType {
     pub fn number(value: Double) -> Self {
         Self::Number(value)
     }
@@ -37,15 +37,15 @@ impl Value {
 
     pub fn as_number(&self) -> Option<Double> {
         match self {
-            Value::Number(x) => Some(*x),
+            DataType::Number(x) => Some(*x),
             _ => None,
         }
     }
 
     pub fn as_bool(&self) -> bool {
         match self {
-            Value::Nil => false,
-            Value::Bool(value) => *value,
+            DataType::Nil => false,
+            DataType::Bool(value) => *value,
             _ => true,
         }
     }

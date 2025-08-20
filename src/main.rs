@@ -4,8 +4,8 @@ use crate::{compiler::compile, utils::ErrorFormatter, vm::Machine};
 
 mod chunk;
 mod compiler;
+mod data;
 mod utils;
-mod value;
 mod vm;
 
 fn main() {

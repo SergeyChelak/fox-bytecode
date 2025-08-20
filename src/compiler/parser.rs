@@ -4,8 +4,8 @@ use crate::{
         scanner::TokenSource,
         token::{Token, TokenType},
     },
+    data::DataType,
     utils::ErrorInfo,
-    value::Value,
     vm::Instruction,
 };
 
@@ -121,8 +121,8 @@ impl Parser {
         let value = self
             .previous
             .as_ref()
-            .and_then(|token| Value::number_from(&token.text).ok())
-            .unwrap_or(Value::number(0.0));
+            .and_then(|token| DataType::number_from(&token.text).ok())
+            .unwrap_or(DataType::number(0.0));
         self.emit_constant(value)
     }
 
@@ -209,12 +209,12 @@ impl Parser {
         }
     }
 
-    fn emit_constant(&mut self, value: Value) {
+    fn emit_constant(&mut self, value: DataType) {
         let idx = self.make_constant(value);
         self.emit_instruction(&Instruction::Constant(idx));
     }
 
-    fn make_constant(&mut self, value: Value) -> u8 {
+    fn make_constant(&mut self, value: DataType) -> u8 {
         let idx = self.chunk.add_constant(value);
         if idx > u8::MAX as usize {
             self.error("Too many constants in one chunk");
@@ -321,7 +321,7 @@ mod test_parser {
     fn emit_unary_chunk() {
         let input = vec![Token::minus(), Token::number("12.345")];
         let expectation = Expectation {
-            constants: vec![Value::number(12.345)],
+            constants: vec![DataType::number(12.345)],
             instructions: vec![Instruction::Constant(0), Instruction::Negate],
         };
         state_expectation_test(input, expectation);
@@ -364,7 +364,7 @@ mod test_parser {
                 instructions.push(exp_instr.clone());
             }
             let expectation = Expectation {
-                constants: vec![Value::number(3.0), Value::number(5.0)],
+                constants: vec![DataType::number(3.0), DataType::number(5.0)],
                 instructions,
             };
             state_expectation_test(input, expectation);
@@ -401,7 +401,11 @@ mod test_parser {
         ];
 
         let expectation = Expectation {
-            constants: vec![Value::number(3.0), Value::number(5.0), Value::number(7.0)],
+            constants: vec![
+                DataType::number(3.0),
+                DataType::number(5.0),
+                DataType::number(7.0),
+            ],
             instructions: vec![
                 Instruction::Constant(0),
                 Instruction::Constant(1),
@@ -438,7 +442,7 @@ mod test_parser {
     }
 
     struct Expectation {
-        constants: Vec<Value>,
+        constants: Vec<DataType>,
         instructions: Vec<Instruction>,
     }
 

@@ -1,11 +1,11 @@
 use crate::{
-    value::Value,
+    data::DataType,
     vm::{FetchResult, Instruction},
 };
 
 pub struct Chunk {
     code: Vec<u8>,
-    constants: Vec<Value>,
+    constants: Vec<DataType>,
     line: Vec<usize>,
 }
 
@@ -27,12 +27,12 @@ impl Chunk {
         self.line.push(line);
     }
 
-    pub fn add_constant(&mut self, value: Value) -> usize {
+    pub fn add_constant(&mut self, value: DataType) -> usize {
         self.constants.push(value);
         self.constants.len() - 1
     }
 
-    pub fn read_const(&self, idx: u8) -> Option<Value> {
+    pub fn read_const(&self, idx: u8) -> Option<DataType> {
         self.constants.get(idx as usize).cloned()
     }
 

@@ -2,7 +2,7 @@ use std::fmt::Display;
 
 use crate::{
     chunk::Chunk,
-    value::{Double, Value},
+    data::{DataType, Double},
     vm::{FetchError, Instruction},
 };
 
@@ -30,7 +30,7 @@ pub type MachineResult<T> = Result<T, MachineError>;
 pub struct Machine {
     chunk: Chunk,
     ip: usize,
-    stack: [Value; STACK_MAX_SIZE],
+    stack: [DataType; STACK_MAX_SIZE],
     stack_top: usize,
 }
 
@@ -39,7 +39,7 @@ impl Machine {
         Self {
             chunk,
             ip: 0,
-            stack: [Value::default(); STACK_MAX_SIZE],
+            stack: [DataType::default(); STACK_MAX_SIZE],
             stack_top: 0,
         }
     }
@@ -69,27 +69,27 @@ impl Machine {
                 Instruction::Equal => {
                     let b = self.stack_pop()?;
                     let a = self.stack_pop()?;
-                    self.stack_push(Value::Bool(a == b))?;
+                    self.stack_push(DataType::Bool(a == b))?;
                 }
-                Instruction::Greater => self.do_binary(|a, b| Value::Bool(a > b))?,
-                Instruction::Less => self.do_binary(|a, b| Value::Bool(a < b))?,
-                Instruction::Nil => self.stack_push(Value::Nil)?,
-                Instruction::True => self.stack_push(Value::Bool(true))?,
-                Instruction::False => self.stack_push(Value::Bool(false))?,
-                Instruction::Add => self.do_binary(|a, b| Value::number(a + b))?,
-                Instruction::Subtract => self.do_binary(|a, b| Value::number(a - b))?,
-                Instruction::Multiply => self.do_binary(|a, b| Value::number(a * b))?,
-                Instruction::Divide => self.do_binary(|a, b| Value::number(a / b))?,
+                Instruction::Greater => self.do_binary(|a, b| DataType::Bool(a > b))?,
+                Instruction::Less => self.do_binary(|a, b| DataType::Bool(a < b))?,
+                Instruction::Nil => self.stack_push(DataType::Nil)?,
+                Instruction::True => self.stack_push(DataType::Bool(true))?,
+                Instruction::False => self.stack_push(DataType::Bool(false))?,
+                Instruction::Add => self.do_binary(|a, b| DataType::number(a + b))?,
+                Instruction::Subtract => self.do_binary(|a, b| DataType::number(a - b))?,
+                Instruction::Multiply => self.do_binary(|a, b| DataType::number(a * b))?,
+                Instruction::Divide => self.do_binary(|a, b| DataType::number(a / b))?,
                 Instruction::Negate => {
                     let value = self.stack_pop()?;
                     let Some(value) = value.as_number() else {
                         return Err(self.runtime_error("Operand must be a number"));
                     };
-                    self.stack_push(Value::number(-value))?;
+                    self.stack_push(DataType::number(-value))?;
                 }
                 Instruction::Not => {
                     let value = self.stack_pop()?;
-                    self.stack_push(Value::Bool(!value.as_bool()))?;
+                    self.stack_push(DataType::Bool(!value.as_bool()))?;
                 }
                 Instruction::Return => {
                     let value = self.stack_pop()?;
@@ -101,7 +101,7 @@ impl Machine {
         Ok(())
     }
 
-    fn do_binary(&mut self, operation: fn(Double, Double) -> Value) -> MachineResult<()> {
+    fn do_binary(&mut self, operation: fn(Double, Double) -> DataType) -> MachineResult<()> {
         let b = self.stack_pop()?;
         let a = self.stack_pop()?;
         let (Some(a), Some(b)) = (a.as_number(), b.as_number()) else {
@@ -111,7 +111,7 @@ impl Machine {
         self.stack_push(val)
     }
 
-    fn read_const(&self, index: u8) -> MachineResult<Value> {
+    fn read_const(&self, index: u8) -> MachineResult<DataType> {
         let Some(value) = self.chunk.read_const(index) else {
             return Err(self.runtime_error("Invalid constant index"));
         };
@@ -122,7 +122,7 @@ impl Machine {
         self.stack_top = 0;
     }
 
-    fn stack_push(&mut self, value: Value) -> MachineResult<()> {
+    fn stack_push(&mut self, value: DataType) -> MachineResult<()> {
         if self.stack_top >= STACK_MAX_SIZE {
             return Err(self.runtime_error("Stack overflow"));
         }
@@ -131,7 +131,7 @@ impl Machine {
         Ok(())
     }
 
-    fn stack_pop(&mut self) -> MachineResult<Value> {
+    fn stack_pop(&mut self) -> MachineResult<DataType> {
         if self.stack_top == 0 {
             return Err(self.runtime_error("Pop on empty stack"));
         }
@@ -158,7 +158,7 @@ mod test {
     fn operation_negate() -> MachineResult<()> {
         let mut chunk = Chunk::new();
         chunk.write_u8(OPCODE_NEGATE, 1);
-        machine_test(chunk, &[Value::number(10.0)], &[Value::number(-10.0)])
+        machine_test(chunk, &[DataType::number(10.0)], &[DataType::number(-10.0)])
     }
 
     #[test]
@@ -170,28 +170,28 @@ mod test {
         };
         machine_test(
             make_chunk(),
-            &[Value::number(2.0), Value::number(2.0)],
-            &[Value::Bool(true)],
+            &[DataType::number(2.0), DataType::number(2.0)],
+            &[DataType::Bool(true)],
         )?;
         machine_test(
             make_chunk(),
-            &[Value::number(3.0), Value::number(2.0)],
-            &[Value::Bool(false)],
+            &[DataType::number(3.0), DataType::number(2.0)],
+            &[DataType::Bool(false)],
         )?;
         machine_test(
             make_chunk(),
-            &[Value::Bool(false), Value::Bool(false)],
-            &[Value::Bool(true)],
+            &[DataType::Bool(false), DataType::Bool(false)],
+            &[DataType::Bool(true)],
         )?;
         machine_test(
             make_chunk(),
-            &[Value::Nil, Value::Nil],
-            &[Value::Bool(true)],
+            &[DataType::Nil, DataType::Nil],
+            &[DataType::Bool(true)],
         )?;
         machine_test(
             make_chunk(),
-            &[Value::Bool(false), Value::Nil],
-            &[Value::Bool(false)],
+            &[DataType::Bool(false), DataType::Nil],
+            &[DataType::Bool(false)],
         )
     }
 
@@ -204,13 +204,13 @@ mod test {
         };
         machine_test(
             make_chunk(),
-            &[Value::number(3.0), Value::number(2.0)],
-            &[Value::Bool(true)],
+            &[DataType::number(3.0), DataType::number(2.0)],
+            &[DataType::Bool(true)],
         )?;
         machine_test(
             make_chunk(),
-            &[Value::number(1.0), Value::number(2.0)],
-            &[Value::Bool(false)],
+            &[DataType::number(1.0), DataType::number(2.0)],
+            &[DataType::Bool(false)],
         )
     }
 
@@ -223,16 +223,20 @@ mod test {
         };
         machine_test(
             make_chunk(),
-            &[Value::number(3.0), Value::number(2.0)],
-            &[Value::Bool(false)],
+            &[DataType::number(3.0), DataType::number(2.0)],
+            &[DataType::Bool(false)],
         )?;
         machine_test(
             make_chunk(),
-            &[Value::number(1.0), Value::number(2.0)],
-            &[Value::Bool(true)],
+            &[DataType::number(1.0), DataType::number(2.0)],
+            &[DataType::Bool(true)],
         )?;
 
-        let res = machine_test(make_chunk(), &[Value::number(1.0), Value::Bool(true)], &[]);
+        let res = machine_test(
+            make_chunk(),
+            &[DataType::number(1.0), DataType::Bool(true)],
+            &[],
+        );
         assert!(res.is_err());
         Ok(())
     }
@@ -241,21 +245,21 @@ mod test {
     fn operation_nil() -> MachineResult<()> {
         let mut chunk = Chunk::new();
         chunk.write_u8(OPCODE_NIL, 1);
-        machine_test(chunk, &[], &[Value::Nil])
+        machine_test(chunk, &[], &[DataType::Nil])
     }
 
     #[test]
     fn operation_true() -> MachineResult<()> {
         let mut chunk = Chunk::new();
         chunk.write_u8(OPCODE_TRUE, 1);
-        machine_test(chunk, &[], &[Value::Bool(true)])
+        machine_test(chunk, &[], &[DataType::Bool(true)])
     }
 
     #[test]
     fn operation_false() -> MachineResult<()> {
         let mut chunk = Chunk::new();
         chunk.write_u8(OPCODE_FALSE, 1);
-        machine_test(chunk, &[], &[Value::Bool(false)])
+        machine_test(chunk, &[], &[DataType::Bool(false)])
     }
 
     #[test]
@@ -264,8 +268,8 @@ mod test {
         chunk.write_u8(OPCODE_ADD, 1);
         machine_test(
             chunk,
-            &[Value::number(2.0), Value::number(3.0)],
-            &[Value::number(5.0)],
+            &[DataType::number(2.0), DataType::number(3.0)],
+            &[DataType::number(5.0)],
         )
     }
 
@@ -275,8 +279,8 @@ mod test {
         chunk.write_u8(OPCODE_SUBTRACT, 1);
         machine_test(
             chunk,
-            &[Value::number(2.0), Value::number(3.0)],
-            &[Value::number(-1.0)],
+            &[DataType::number(2.0), DataType::number(3.0)],
+            &[DataType::number(-1.0)],
         )
     }
 
@@ -286,8 +290,8 @@ mod test {
         chunk.write_u8(OPCODE_MULTIPLY, 1);
         machine_test(
             chunk,
-            &[Value::number(2.0), Value::number(3.0)],
-            &[Value::number(6.0)],
+            &[DataType::number(2.0), DataType::number(3.0)],
+            &[DataType::number(6.0)],
         )
     }
 
@@ -297,8 +301,8 @@ mod test {
         chunk.write_u8(OPCODE_DIVIDE, 1);
         machine_test(
             chunk,
-            &[Value::number(6.0), Value::number(3.0)],
-            &[Value::number(2.0)],
+            &[DataType::number(6.0), DataType::number(3.0)],
+            &[DataType::number(2.0)],
         )
     }
 
@@ -306,8 +310,8 @@ mod test {
     fn operation_constant() -> MachineResult<()> {
         let mut chunk = Chunk::new();
         chunk.write_u8(OPCODE_CONSTANT, 1);
-        chunk.add_constant(Value::number(2.0));
-        let idx = chunk.add_constant(Value::number(10.0));
+        chunk.add_constant(DataType::number(2.0));
+        let idx = chunk.add_constant(DataType::number(10.0));
         chunk.write_u8(idx as u8, 1);
         let mut machine = Machine::with(chunk);
         machine.run()?;
@@ -315,7 +319,11 @@ mod test {
         Ok(())
     }
 
-    fn machine_test(chunk: Chunk, stack_in: &[Value], stack_out: &[Value]) -> MachineResult<()> {
+    fn machine_test(
+        chunk: Chunk,
+        stack_in: &[DataType],
+        stack_out: &[DataType],
+    ) -> MachineResult<()> {
         let mut machine = Machine::with(chunk);
         for v_in in stack_in {
             machine.stack_push(*v_in)?;
