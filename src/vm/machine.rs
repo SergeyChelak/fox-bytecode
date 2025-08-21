@@ -104,6 +104,7 @@ impl Machine {
                     self.stack_pop()?;
                 }
                 Instruction::DefineGlobal(index) => self.define_global(index)?,
+                Instruction::GetGlobal(index) => self.get_global(index)?,
             }
         }
         Ok(())
@@ -117,6 +118,18 @@ impl Machine {
         let value = self.stack_pop()?;
         self.globals.insert(name, value);
         Ok(())
+    }
+
+    fn get_global(&mut self, index: u8) -> MachineResult<()> {
+        let name = self.read_const(index)?;
+        let Some(name) = name.as_text() else {
+            panic!("Bug: Constant name isn't a string")
+        };
+        let Some(value) = self.globals.get(&name).cloned() else {
+            let message = format!("Undefined variable {}", name);
+            return Err(self.runtime_error(&message));
+        };
+        self.stack_push(value)
     }
 
     fn do_binary(&mut self, operation: DataOperation) -> MachineResult<()> {

@@ -279,6 +279,19 @@ impl Parser {
         self.emit_constant(DataType::text_from_str(text));
     }
 
+    fn variable(&mut self) {
+        self.named_variable(
+            self.previous
+                .clone()
+                .expect("Bug: previous token is none while called 'variable'"),
+        );
+    }
+
+    fn named_variable(&mut self, token: Token) {
+        let idx = self.identifier_constant(token);
+        self.emit_instruction(&Instruction::GetGlobal(idx));
+    }
+
     fn prev_token_type(&self) -> TokenType {
         self.previous
             .as_ref()
@@ -310,6 +323,7 @@ impl Parser {
                 ParseRule::new(None, Some(Self::binary), Precedence::Comparison)
             }
             TokenType::String => ParseRule::new(Some(Self::string), None, Precedence::None),
+            Identifier => ParseRule::new(Some(Self::variable), None, Precedence::None),
             _ => Default::default(),
         }
     }
