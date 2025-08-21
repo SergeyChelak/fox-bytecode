@@ -105,31 +105,45 @@ impl Machine {
                 }
                 Instruction::DefineGlobal(index) => self.define_global(index)?,
                 Instruction::GetGlobal(index) => self.get_global(index)?,
+                Instruction::SetGlobal(index) => self.set_global(index)?,
             }
         }
         Ok(())
     }
 
     fn define_global(&mut self, index: u8) -> MachineResult<()> {
-        let name = self.read_const(index)?;
-        let Some(name) = name.as_text() else {
-            panic!("Bug: Constant name isn't a string")
-        };
+        let name = self.read_const_string(index)?;
         let value = self.stack_pop()?;
         self.globals.insert(name, value);
         Ok(())
     }
 
     fn get_global(&mut self, index: u8) -> MachineResult<()> {
-        let name = self.read_const(index)?;
-        let Some(name) = name.as_text() else {
-            panic!("Bug: Constant name isn't a string")
-        };
+        let name = self.read_const_string(index)?;
         let Some(value) = self.globals.get(&name).cloned() else {
             let message = format!("Undefined variable {}", name);
             return Err(self.runtime_error(&message));
         };
         self.stack_push(value)
+    }
+
+    fn set_global(&mut self, index: u8) -> MachineResult<()> {
+        let name = self.read_const_string(index)?;
+        if !self.globals.contains_key(&name) {
+            let message = format!("Undefined variable {}", name);
+            return Err(self.runtime_error(&message));
+        }
+        let value = self.stack_pop()?;
+        self.globals.insert(name, value);
+        todo!()
+    }
+
+    fn read_const_string(&self, index: u8) -> MachineResult<Rc<String>> {
+        let name = self.read_const(index)?;
+        let Some(name) = name.as_text() else {
+            return Err(self.runtime_error("Bug: failed to fetch constant"));
+        };
+        Ok(name)
     }
 
     fn do_binary(&mut self, operation: DataOperation) -> MachineResult<()> {

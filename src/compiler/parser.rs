@@ -189,7 +189,9 @@ impl Parser {
             self.error("Expect expression");
             return;
         };
-        prefix_rule(self);
+
+        let can_assign = precedence.le(&Precedence::Assignment);
+        prefix_rule(self, can_assign);
 
         while precedence.le(&self.get_rule(self.cur_token_type()).precedence) {
             self.advance();
@@ -197,7 +199,11 @@ impl Parser {
                 .get_rule(self.prev_token_type())
                 .infix
                 .expect("Infix is none");
-            infix_rule(self);
+            infix_rule(self, can_assign);
+        }
+
+        if can_assign && self.is_match(TokenType::Equal) {
+            self.error("Invalid assignment target");
         }
     }
 
@@ -209,7 +215,7 @@ impl Parser {
         self.emit_instruction(&Instruction::Return)
     }
 
-    fn number(&mut self) {
+    fn number(&mut self, _can_assign: bool) {
         // I don't like this approach
         // according to strtod it returns 0.0 as fallback
         let value = self
@@ -220,12 +226,12 @@ impl Parser {
         self.emit_constant(value)
     }
 
-    fn grouping(&mut self) {
+    fn grouping(&mut self, _can_assign: bool) {
         self.expression();
         self.consume(TokenType::RightParenthesis, "Expect ')' after expression");
     }
 
-    fn unary(&mut self) {
+    fn unary(&mut self, _can_assign: bool) {
         // TODO: made according to the book, looks bad...
         let operator_type = self.prev_token_type();
         // Compile the operand
@@ -239,7 +245,7 @@ impl Parser {
         }
     }
 
-    fn binary(&mut self) {
+    fn binary(&mut self, _can_assign: bool) {
         let operator_type = self.prev_token_type();
         let rule = self.get_rule(operator_type);
         self.parse_precedence(rule.precedence.increased());
@@ -260,7 +266,7 @@ impl Parser {
         self.emit_instructions(array);
     }
 
-    fn literal(&mut self) {
+    fn literal(&mut self, _can_assign: bool) {
         match self.prev_token_type() {
             TokenType::False => self.emit_instruction(&Instruction::False),
             TokenType::True => self.emit_instruction(&Instruction::True),
@@ -269,7 +275,7 @@ impl Parser {
         }
     }
 
-    fn string(&mut self) {
+    fn string(&mut self, _can_assign: bool) {
         let text = self
             .previous
             .as_ref()
@@ -279,17 +285,23 @@ impl Parser {
         self.emit_constant(DataType::text_from_str(text));
     }
 
-    fn variable(&mut self) {
+    fn variable(&mut self, can_assign: bool) {
         self.named_variable(
             self.previous
                 .clone()
                 .expect("Bug: previous token is none while called 'variable'"),
+            can_assign,
         );
     }
 
-    fn named_variable(&mut self, token: Token) {
+    fn named_variable(&mut self, token: Token, can_assign: bool) {
         let idx = self.identifier_constant(token);
-        self.emit_instruction(&Instruction::GetGlobal(idx));
+        if can_assign && self.is_match(TokenType::Equal) {
+            self.expression();
+            self.emit_instruction(&Instruction::SetGlobal(idx));
+        } else {
+            self.emit_instruction(&Instruction::GetGlobal(idx));
+        }
     }
 
     fn prev_token_type(&self) -> TokenType {
@@ -403,7 +415,7 @@ impl Precedence {
     }
 }
 
-type ParseFn = fn(&mut Parser);
+type ParseFn = fn(&mut Parser, bool);
 
 struct ParseRule {
     prefix: Option<ParseFn>,
