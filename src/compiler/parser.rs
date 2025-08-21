@@ -54,7 +54,36 @@ impl Parser {
     }
 
     fn var_declaration(&mut self) {
-        todo!()
+        let global = self.parse_variable("Expect variable name");
+
+        if self.is_match(TokenType::Equal) {
+            self.expression();
+        } else {
+            self.emit_instruction(&Instruction::Nil);
+        }
+        self.consume(
+            TokenType::Semicolon,
+            "Expect ';' after variable declaration",
+        );
+
+        self.define_variable(global);
+    }
+
+    fn parse_variable(&mut self, message: &str) -> u8 {
+        self.consume(TokenType::Identifier, message);
+        self.identifier_constant(
+            self.previous
+                .clone()
+                .expect("Bug: previous is nil in parse variable"),
+        )
+    }
+
+    fn identifier_constant(&mut self, token: Token) -> u8 {
+        self.make_constant(DataType::text_from_string(token.text))
+    }
+
+    fn define_variable(&mut self, global: u8) {
+        self.emit_instruction(&Instruction::DefineGlobal(global));
     }
 
     fn statement(&mut self) {

@@ -16,6 +16,7 @@ pub const OPCODE_GREATER: u8 = 12;
 pub const OPCODE_EQUAL: u8 = 13;
 pub const OPCODE_PRINT: u8 = 14;
 pub const OPCODE_POP: u8 = 15;
+pub const OPCODE_DEFINE_GLOBAL: u8 = 16;
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Instruction {
@@ -35,6 +36,7 @@ pub enum Instruction {
     Print,
     Return,
     Pop,
+    DefineGlobal(u8),
 }
 
 impl Display for Instruction {
@@ -56,6 +58,7 @@ impl Display for Instruction {
             Instruction::Print => write!(f, "print"),
             Instruction::Return => write!(f, "return"),
             Instruction::Pop => write!(f, "pop"),
+            Instruction::DefineGlobal(x) => write!(f, "def_global {x}"),
         }
     }
 }
@@ -98,6 +101,7 @@ impl Instruction {
             Instruction::Less => vec![OPCODE_LESS],
             Instruction::Print => vec![OPCODE_PRINT],
             Instruction::Pop => vec![OPCODE_POP],
+            Instruction::DefineGlobal(x) => vec![OPCODE_DEFINE_GLOBAL, *x],
         }
     }
 
@@ -128,6 +132,10 @@ impl Instruction {
             OPCODE_RETURN => Ok(Instruction::Return),
 
             OPCODE_POP => Ok(Instruction::Pop),
+            OPCODE_DEFINE_GLOBAL => {
+                let arg1 = consume(buffer, offset).ok_or(FetchError::Broken)?;
+                Ok(Instruction::DefineGlobal(arg1))
+            }
             x => Err(FetchError::Unknown(x)),
         }
     }

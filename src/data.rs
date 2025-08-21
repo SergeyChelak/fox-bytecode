@@ -52,6 +52,13 @@ impl DataType {
         }
     }
 
+    pub fn as_text(&self) -> Option<Rc<String>> {
+        match self {
+            DataType::Text(val) => Some(val.clone()),
+            _ => None,
+        }
+    }
+
     pub fn as_bool(&self) -> bool {
         match self {
             DataType::Nil => false,

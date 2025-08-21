@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::{collections::HashMap, fmt::Display, rc::Rc};
 
 use crate::{
     chunk::Chunk,
@@ -31,6 +31,7 @@ pub struct Machine {
     chunk: Chunk,
     ip: usize,
     stack: Vec<DataType>,
+    globals: HashMap<Rc<String>, DataType>,
     test_output_buffer: Vec<String>,
 }
 
@@ -40,6 +41,7 @@ impl Machine {
             chunk,
             ip: 0,
             stack: Vec::<DataType>::with_capacity(STACK_MAX_SIZE),
+            globals: HashMap::new(),
             test_output_buffer: Vec::new(),
         }
     }
@@ -101,8 +103,19 @@ impl Machine {
                 Instruction::Pop => {
                     self.stack_pop()?;
                 }
+                Instruction::DefineGlobal(index) => self.define_global(index)?,
             }
         }
+        Ok(())
+    }
+
+    fn define_global(&mut self, index: u8) -> MachineResult<()> {
+        let name = self.read_const(index)?;
+        let Some(name) = name.as_text() else {
+            panic!("Bug: Constant name isn't a string")
+        };
+        let value = self.stack_pop()?;
+        self.globals.insert(name, value);
         Ok(())
     }
 
