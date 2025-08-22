@@ -30,7 +30,7 @@ impl Parser {
         }
     }
 
-    pub fn compile(&mut self) -> Result<(), Vec<ErrorInfo>> {
+    pub fn compile(mut self) -> Result<Chunk, Vec<ErrorInfo>> {
         self.advance();
         while !self.is_match(TokenType::Eof) {
             self.declaration();
@@ -39,7 +39,7 @@ impl Parser {
         if !self.errors.is_empty() {
             return Err(self.errors.clone());
         }
-        Ok(())
+        Ok(self.chunk)
     }
 
     fn declaration(&mut self) {
@@ -540,14 +540,12 @@ mod test_parser {
 
     fn state_expectation_test(input: Vec<Token>, expectation: Expectation) {
         let mock = ScannerMock::new(input);
-        let mut parser = Parser::with(Box::new(mock));
-        let res = parser.compile();
-        if let Err(err) = res {
-            panic!("{:?}", err);
-        }
-        // assert!(res.is_ok());
+        let parser = Parser::with(Box::new(mock));
 
-        let chunk = parser.chunk;
+        let chunk = match parser.compile() {
+            Ok(value) => value,
+            Err(err) => panic!("{:?}", err),
+        };
         for (i, x) in expectation.constants.iter().enumerate() {
             assert_eq!(chunk.read_const(i as u8), Some(x.clone()));
         }
