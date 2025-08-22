@@ -65,7 +65,7 @@ impl Scope {
             if local.name.text == token.text {
                 let info = LocalVariableInfo {
                     index: i as u8,
-                    depth: local.depth.clone(),
+                    depth: local.depth,
                 };
                 return Some(info);
             }
