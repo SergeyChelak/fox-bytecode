@@ -5,7 +5,7 @@ use crate::{
         token::{Token, TokenType},
     },
     data::DataType,
-    utils::ErrorInfo,
+    error_info::ErrorInfo,
     vm::Instruction,
 };
 

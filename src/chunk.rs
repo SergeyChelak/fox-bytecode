@@ -3,6 +3,7 @@ use crate::{
     vm::{FetchResult, Instruction},
 };
 
+#[derive(Default)]
 pub struct Chunk {
     code: Vec<u8>,
     constants: Vec<DataType>,
@@ -11,11 +12,7 @@ pub struct Chunk {
 
 impl Chunk {
     pub fn new() -> Self {
-        Self {
-            code: Default::default(),
-            constants: Default::default(),
-            line: Default::default(),
-        }
+        Self::default()
     }
 
     pub fn write_u8(&mut self, byte: u8, line: usize) {

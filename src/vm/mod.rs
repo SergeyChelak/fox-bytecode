@@ -1,68 +1,103 @@
 mod instruction;
+
 pub use instruction::*;
 
 mod machine;
 pub use machine::Machine;
 
-use crate::{data::DataType, vm::machine::MachineError};
+use crate::{
+    data::DataType,
+    error_info::{ErrorFormatter, ErrorInfo},
+    vm::machine::MachineError,
+};
 
 pub trait MachineIO {
     fn push_output(&mut self, value: DataType);
 
-    fn push_error(&mut self, error: MachineError);
+    fn set_vm_error(&mut self, error: MachineError);
+
+    fn set_scanner_errors(&mut self, errors: &[ErrorInfo]);
 }
 
-pub struct SystemIO;
+pub struct SystemIO {
+    formatter: ErrorFormatter,
+}
+
+impl SystemIO {
+    pub fn new(formatter: ErrorFormatter) -> Self {
+        Self { formatter }
+    }
+}
 
 impl MachineIO for SystemIO {
     fn push_output(&mut self, value: DataType) {
         println!("{value}");
     }
 
-    fn push_error(&mut self, _error: MachineError) {
-        // no op
+    fn set_vm_error(&mut self, error: MachineError) {
+        eprintln!("Runtime error: {error}")
+    }
+
+    fn set_scanner_errors(&mut self, errors: &[ErrorInfo]) {
+        for err in errors {
+            let text = self.formatter.format_error(err);
+            eprintln!("{text}");
+        }
     }
 }
 
-#[cfg(test)]
-pub mod probe {
-    use super::{DataType, MachineError, MachineIO};
+#[derive(Default)]
+pub struct Probe {
+    output_buffer: Vec<String>,
+    vm_error: Option<MachineError>,
+    scanner_errors: Vec<ErrorInfo>,
+}
 
-    pub struct Probe {
-        output_buffer: Vec<String>,
-        error: Option<MachineError>,
+impl Probe {
+    pub fn new() -> Self {
+        Self::default()
     }
 
-    impl Probe {
-        pub fn new() -> Self {
-            Self {
-                output_buffer: Vec::new(),
-                error: None,
-            }
+    pub fn assert_output_match(&self, output: &[String]) {
+        for (l, r) in self.output_buffer.iter().zip(output.iter()) {
+            assert_eq!(l, r)
         }
-
-        pub fn is_output_matches(&self, output: &[String]) -> bool {
-            if self.output_buffer.len() != output.len() {
-                return false;
-            }
-            self.output_buffer
-                .iter()
-                .zip(output.iter())
-                .all(|(l, r)| l == r)
-        }
-
-        pub fn output_to_string(&self) -> String {
-            self.output_buffer.join("\n")
-        }
+        assert_eq!(
+            self.output_buffer.len(),
+            output.len(),
+            "Output buffer line count mismatch"
+        )
     }
 
-    impl MachineIO for Probe {
-        fn push_output(&mut self, value: DataType) {
-            self.output_buffer.push(value.to_string());
+    pub fn is_output_matches(&self, output: &[String]) -> bool {
+        if self.output_buffer.len() != output.len() {
+            return false;
         }
+        self.output_buffer
+            .iter()
+            .zip(output.iter())
+            .all(|(l, r)| l == r)
+    }
 
-        fn push_error(&mut self, error: MachineError) {
-            self.error = Some(error);
-        }
+    pub fn output_to_string(&self) -> String {
+        self.output_buffer.join("\n")
+    }
+
+    pub fn vm_error(&self) -> Option<MachineError> {
+        self.vm_error.clone()
+    }
+}
+
+impl MachineIO for Probe {
+    fn push_output(&mut self, value: DataType) {
+        self.output_buffer.push(value.to_string());
+    }
+
+    fn set_vm_error(&mut self, error: MachineError) {
+        self.vm_error = Some(error);
+    }
+
+    fn set_scanner_errors(&mut self, errors: &[ErrorInfo]) {
+        self.scanner_errors = errors.to_vec();
     }
 }

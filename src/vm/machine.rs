@@ -49,7 +49,7 @@ impl Machine {
         let result = self.perform();
         if let Err(err) = &result {
             self.stack_reset();
-            self.io.borrow_mut().push_error(err.clone());
+            self.io.borrow_mut().set_vm_error(err.clone());
         }
         result
     }
@@ -126,13 +126,14 @@ impl Machine {
 
     fn set_global(&mut self, index: u8) -> MachineResult<()> {
         let name = self.read_const_string(index)?;
+        println!("set global for '{name}'");
         if !self.globals.contains_key(&name) {
             let message = format!("Undefined variable {}", name);
             return Err(self.runtime_error(&message));
         }
-        let value = self.stack_pop()?;
+        let value = self.stack_peek().expect("set_global: no value to push");
         self.globals.insert(name, value);
-        todo!()
+        Ok(())
     }
 
     fn read_const_string(&self, index: u8) -> MachineResult<Rc<String>> {
@@ -177,6 +178,10 @@ impl Machine {
         Ok(())
     }
 
+    fn stack_peek(&mut self) -> Option<DataType> {
+        self.stack.last().cloned()
+    }
+
     fn stack_pop(&mut self) -> MachineResult<DataType> {
         let Some(value) = self.stack.pop() else {
             return Err(self.runtime_error("Pop on empty stack"));
@@ -197,7 +202,7 @@ impl Machine {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::vm::{probe::Probe, *};
+    use crate::vm::*;
 
     #[test]
     fn operation_negate() -> MachineResult<()> {
@@ -426,10 +431,26 @@ mod test {
         chunk.add_constant(DataType::number(2.0));
         let idx = chunk.add_constant(DataType::number(10.0));
         chunk.write_u8(idx as u8, 1);
-        let mut machine = Machine::with(chunk, Rc::new(RefCell::new(SystemIO)));
+        let mut machine = Machine::with(chunk, Rc::new(RefCell::new(DummyIO)));
         machine.run()?;
         assert_eq!(machine.stack_pop().unwrap().as_number(), Some(10.0));
         Ok(())
+    }
+
+    struct DummyIO;
+
+    impl MachineIO for DummyIO {
+        fn push_output(&mut self, _value: DataType) {
+            // no op
+        }
+
+        fn set_vm_error(&mut self, _error: MachineError) {
+            // no op
+        }
+
+        fn set_scanner_errors(&mut self, _errors: &[ErrorInfo]) {
+            // no op
+        }
     }
 
     fn machine_test(

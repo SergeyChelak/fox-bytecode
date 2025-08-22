@@ -1,4 +1,4 @@
-use crate::utils::CodePosition;
+use crate::error_info::CodePosition;
 
 #[derive(Debug, Clone)]
 pub struct Token {
