@@ -30,6 +30,10 @@ impl ErrorInfo {
             message: text,
         }
     }
+
+    pub fn message(&self) -> &str {
+        self.message.as_str()
+    }
 }
 
 #[derive(Debug, Clone)]

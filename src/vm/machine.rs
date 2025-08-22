@@ -14,6 +14,12 @@ pub struct MachineError {
     line_number: Option<usize>,
 }
 
+impl MachineError {
+    pub fn message(&self) -> &str {
+        self.text.as_str()
+    }
+}
+
 impl Display for MachineError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let val = if let Some(num) = self.line_number {
