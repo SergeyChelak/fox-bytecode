@@ -1,6 +1,10 @@
-use std::{process::exit, rc::Rc};
+use std::{cell::RefCell, process::exit, rc::Rc};
 
-use crate::{compiler::compile, utils::ErrorFormatter, vm::Machine};
+use crate::{
+    compiler::compile,
+    utils::ErrorFormatter,
+    vm::{Machine, SystemIO},
+};
 
 mod chunk;
 mod compiler;
@@ -31,7 +35,7 @@ fn interpret(code: Vec<char>) {
     let result = compile(code_ref.clone());
     match result {
         Ok(chunk) => {
-            let mut vm = Machine::with(chunk);
+            let mut vm = Machine::with(chunk, Rc::new(RefCell::new(SystemIO)));
             let result = vm.run();
 
             if let Err(err) = result {

@@ -1,14 +1,14 @@
-use std::{collections::HashMap, fmt::Display, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, fmt::Display, rc::Rc};
 
 use crate::{
     chunk::Chunk,
     data::{DataOperation, DataType, OperationError},
-    vm::{FetchError, Instruction},
+    vm::{FetchError, Instruction, MachineIO},
 };
 
 const STACK_MAX_SIZE: usize = 256;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct MachineError {
     text: String,
     line_number: Option<usize>,
@@ -32,23 +32,24 @@ pub struct Machine {
     ip: usize,
     stack: Vec<DataType>,
     globals: HashMap<Rc<String>, DataType>,
-    test_output_buffer: Vec<String>,
+    io: Rc<RefCell<dyn MachineIO>>,
 }
 
 impl Machine {
-    pub fn with(chunk: Chunk) -> Self {
+    pub fn with(chunk: Chunk, io: Rc<RefCell<dyn MachineIO>>) -> Self {
         Self {
             chunk,
             ip: 0,
             stack: Vec::<DataType>::with_capacity(STACK_MAX_SIZE),
             globals: HashMap::new(),
-            test_output_buffer: Vec::new(),
+            io,
         }
     }
     pub fn run(&mut self) -> MachineResult<()> {
         let result = self.perform();
-        if result.is_err() {
+        if let Err(err) = &result {
             self.stack_reset();
+            self.io.borrow_mut().push_error(err.clone());
         }
         result
     }
@@ -91,11 +92,7 @@ impl Machine {
                 }
                 Instruction::Print => {
                     let value = self.stack_pop()?;
-                    println!("{value}");
-                    if cfg!(test) {
-                        let output = format!("{value}");
-                        self.test_output_buffer.push(output);
-                    }
+                    self.io.borrow_mut().push_output(value);
                 }
                 Instruction::Return => {
                     break 'run_loop;
@@ -200,7 +197,7 @@ impl Machine {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::vm::*;
+    use crate::vm::{probe::Probe, *};
 
     #[test]
     fn operation_negate() -> MachineResult<()> {
@@ -429,7 +426,7 @@ mod test {
         chunk.add_constant(DataType::number(2.0));
         let idx = chunk.add_constant(DataType::number(10.0));
         chunk.write_u8(idx as u8, 1);
-        let mut machine = Machine::with(chunk);
+        let mut machine = Machine::with(chunk, Rc::new(RefCell::new(SystemIO)));
         machine.run()?;
         assert_eq!(machine.stack_pop().unwrap().as_number(), Some(10.0));
         Ok(())
@@ -441,7 +438,8 @@ mod test {
         stack_out: &[DataType],
         buffer_out: &[String],
     ) -> MachineResult<()> {
-        let mut machine = Machine::with(chunk);
+        let probe_ref = Rc::new(RefCell::new(Probe::new()));
+        let mut machine = Machine::with(chunk, probe_ref.clone());
         for v_in in stack_in {
             machine.stack_push(v_in.clone())?;
         }
@@ -451,7 +449,14 @@ mod test {
             assert_eq!(val, *v_out);
         }
 
-        assert_eq!(buffer_out.len(), machine.test_output_buffer.len());
+        let probe = probe_ref.borrow();
+        if !probe.is_output_matches(buffer_out) {
+            panic!(
+                "Expected: {}\nOutput: {}",
+                buffer_out.join("\n"),
+                probe.output_to_string()
+            );
+        }
 
         assert!(machine.stack.is_empty());
         Ok(())
