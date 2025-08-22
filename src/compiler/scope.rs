@@ -2,6 +2,11 @@ use crate::compiler::Token;
 
 const MAX_SCOPE_SIZE: usize = 256;
 
+pub struct LocalVariableInfo {
+    pub index: u8,
+    pub depth: Option<usize>,
+}
+
 // I think the 'Compiler' is strange name for scope manager
 #[derive(Default)]
 pub struct Scope {
@@ -22,10 +27,6 @@ impl Scope {
             self.locals.pop();
         }
         pop_count
-    }
-
-    pub fn depth(&self) -> usize {
-        self.depth
     }
 
     pub fn is_global(&self) -> bool {
@@ -59,6 +60,19 @@ impl Scope {
         false
     }
 
+    pub fn resolve_local(&self, token: &Token) -> Option<LocalVariableInfo> {
+        for (i, local) in self.locals.iter().enumerate().rev() {
+            if local.name.text == token.text {
+                let info = LocalVariableInfo {
+                    index: i as u8,
+                    depth: local.depth.clone(),
+                };
+                return Some(info);
+            }
+        }
+        None
+    }
+
     fn is_last_out_of_scope(&mut self) -> bool {
         let Some(depth) = self.locals.last().and_then(|local| local.depth) else {
             return false;
@@ -76,8 +90,7 @@ impl Scope {
 
 pub struct Local {
     name: Token,
-    // TODO: remove pub!
-    pub depth: Option<usize>,
+    depth: Option<usize>,
 }
 
 impl Local {

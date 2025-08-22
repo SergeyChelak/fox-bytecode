@@ -103,6 +103,17 @@ impl Machine {
                 Instruction::DefineGlobal(index) => self.define_global(index)?,
                 Instruction::GetGlobal(index) => self.get_global(index)?,
                 Instruction::SetGlobal(index) => self.set_global(index)?,
+
+                Instruction::GetLocal(slot) => {
+                    let value = self.stack[slot as usize].clone();
+                    self.stack_push(value)?
+                }
+                Instruction::SetLocal(slot) => {
+                    let Some(value) = self.stack_peek() else {
+                        return Err(self.runtime_error("Bug: empty stack on 'SetLocal'"));
+                    };
+                    self.stack[slot as usize] = value;
+                }
             }
         }
         Ok(())

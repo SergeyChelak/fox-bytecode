@@ -97,9 +97,7 @@ impl Parser {
             self.error("Too many local variables in function");
             return;
         }
-        let mut local = Local::with_token(token);
-        // TODO: remove this line
-        local.depth = Some(self.scope.depth());
+        let local = Local::with_token(token);
         self.scope.push(local);
     }
 
@@ -109,6 +107,7 @@ impl Parser {
 
     fn define_variable(&mut self, global: u8) {
         if self.scope.is_local() {
+            self.scope.mark_initialized();
             return;
         }
         self.emit_instruction(&Instruction::DefineGlobal(global));
@@ -336,12 +335,23 @@ impl Parser {
     }
 
     fn named_variable(&mut self, token: Token, can_assign: bool) {
-        let idx = self.identifier_constant(token);
+        let (getter, setter) = if let Some(info) = self.scope.resolve_local(&token) {
+            if info.depth.is_none() {
+                self.error("Can't read local variable in its own initializer");
+            }
+            (
+                Instruction::GetLocal(info.index),
+                Instruction::SetLocal(info.index),
+            )
+        } else {
+            let idx = self.identifier_constant(token);
+            (Instruction::GetGlobal(idx), Instruction::SetGlobal(idx))
+        };
         if can_assign && self.is_match(TokenType::Equal) {
             self.expression();
-            self.emit_instruction(&Instruction::SetGlobal(idx));
+            self.emit_instruction(&setter);
         } else {
-            self.emit_instruction(&Instruction::GetGlobal(idx));
+            self.emit_instruction(&getter);
         }
     }
 

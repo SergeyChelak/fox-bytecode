@@ -19,6 +19,8 @@ pub const OPCODE_POP: u8 = 15;
 pub const OPCODE_DEFINE_GLOBAL: u8 = 16;
 pub const OPCODE_GET_GLOBAL: u8 = 17;
 pub const OPCODE_SET_GLOBAL: u8 = 18;
+pub const OPCODE_GET_LOCAL: u8 = 19;
+pub const OPCODE_SET_LOCAL: u8 = 20;
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Instruction {
@@ -41,6 +43,8 @@ pub enum Instruction {
     DefineGlobal(u8),
     GetGlobal(u8),
     SetGlobal(u8),
+    GetLocal(u8),
+    SetLocal(u8),
 }
 
 #[derive(Debug)]
@@ -84,6 +88,8 @@ impl Instruction {
             Instruction::DefineGlobal(val) => vec![OPCODE_DEFINE_GLOBAL, *val],
             Instruction::GetGlobal(val) => vec![OPCODE_GET_GLOBAL, *val],
             Instruction::SetGlobal(val) => vec![OPCODE_SET_GLOBAL, *val],
+            Instruction::GetLocal(val) => vec![OPCODE_GET_LOCAL, *val],
+            Instruction::SetLocal(val) => vec![OPCODE_SET_LOCAL, *val],
         }
     }
 
@@ -125,6 +131,14 @@ impl Instruction {
             OPCODE_SET_GLOBAL => {
                 let arg1 = consume(buffer, offset).ok_or(FetchError::Broken)?;
                 Ok(Instruction::SetGlobal(arg1))
+            }
+            OPCODE_GET_LOCAL => {
+                let arg1 = consume(buffer, offset).ok_or(FetchError::Broken)?;
+                Ok(Instruction::GetLocal(arg1))
+            }
+            OPCODE_SET_LOCAL => {
+                let arg1 = consume(buffer, offset).ok_or(FetchError::Broken)?;
+                Ok(Instruction::SetLocal(arg1))
             }
             x => Err(FetchError::Unknown(x)),
         }
