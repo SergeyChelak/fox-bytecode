@@ -8,7 +8,7 @@ pub fn str_to_code_ref(input: &str) -> Rc<Vec<char>> {
     Rc::new(input.chars().collect())
 }
 
-pub fn interpret_by_probe(input: &str) -> Rc<RefCell<Probe>> {
+pub fn interpret_using_probe(input: &str) -> Rc<RefCell<Probe>> {
     let code_ref = str_to_code_ref(input);
     let machine_io = Probe::new();
     let io_ref = Rc::new(RefCell::new(machine_io));

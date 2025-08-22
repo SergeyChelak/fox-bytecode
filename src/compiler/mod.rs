@@ -1,5 +1,6 @@
 mod parser;
 mod scanner;
+mod scope;
 mod token;
 
 use std::rc::Rc;

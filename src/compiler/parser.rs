@@ -2,6 +2,7 @@ use crate::{
     chunk::Chunk,
     compiler::{
         scanner::TokenSource,
+        scope::{Local, Scope},
         token::{Token, TokenType},
     },
     data::DataType,
@@ -16,6 +17,7 @@ pub struct Parser {
     panic_mode: bool,
     chunk: Chunk,
     errors: Vec<ErrorInfo>,
+    scope: Scope,
 }
 
 impl Parser {
@@ -27,6 +29,7 @@ impl Parser {
             panic_mode: false,
             chunk: Chunk::new(),
             errors: Default::default(),
+            scope: Default::default(),
         }
     }
 
@@ -71,7 +74,33 @@ impl Parser {
 
     fn parse_variable(&mut self, message: &str) -> u8 {
         self.consume(TokenType::Identifier, message);
+        self.declare_variable();
+        if self.scope.is_local() {
+            return 0;
+        }
         self.identifier_constant(self.previous.clone())
+    }
+
+    fn declare_variable(&mut self) {
+        if self.scope.is_global() {
+            return;
+        }
+        let token = self.previous.clone();
+        if self.scope.has_declared_variable(&token) {
+            self.error("Already a variable with this name in this scope");
+        }
+        self.add_local(token);
+    }
+
+    fn add_local(&mut self, token: Token) {
+        if !self.scope.has_capacity() {
+            self.error("Too many local variables in function");
+            return;
+        }
+        let mut local = Local::with_token(token);
+        // TODO: remove this line
+        local.depth = Some(self.scope.depth());
+        self.scope.push(local);
     }
 
     fn identifier_constant(&mut self, token: Token) -> u8 {
@@ -79,14 +108,41 @@ impl Parser {
     }
 
     fn define_variable(&mut self, global: u8) {
+        if self.scope.is_local() {
+            return;
+        }
         self.emit_instruction(&Instruction::DefineGlobal(global));
     }
 
     fn statement(&mut self) {
         if self.is_match(TokenType::Print) {
             self.print_statement();
-        } else {
-            self.expression_statement();
+            return;
+        }
+        if self.is_match(TokenType::LeftBrace) {
+            self.begin_scope();
+            self.block();
+            self.end_scope();
+            return;
+        }
+        self.expression_statement();
+    }
+
+    fn begin_scope(&mut self) {
+        self.scope.begin_scope();
+    }
+
+    fn block(&mut self) {
+        while !self.check(TokenType::RightBrace) && !self.check(TokenType::Eof) {
+            self.declaration();
+        }
+        self.consume(TokenType::RightBrace, "Expect '}' after block");
+    }
+
+    fn end_scope(&mut self) {
+        let pops = self.scope.end_scope();
+        for _ in 0..pops {
+            self.emit_instruction(&Instruction::Pop);
         }
     }
 
