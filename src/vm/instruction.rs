@@ -43,32 +43,6 @@ pub enum Instruction {
     SetGlobal(u8),
 }
 
-impl Display for Instruction {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Instruction::Constant(x) => write!(f, "const {x}"),
-            Instruction::Equal => write!(f, "eq"),
-            Instruction::Greater => write!(f, "greater"),
-            Instruction::Less => write!(f, "less"),
-            Instruction::Nil => write!(f, "nil"),
-            Instruction::True => write!(f, "true"),
-            Instruction::False => write!(f, "false"),
-            Instruction::Negate => write!(f, "negate"),
-            Instruction::Add => write!(f, "add"),
-            Instruction::Subtract => write!(f, "subtract"),
-            Instruction::Multiply => write!(f, "multiply"),
-            Instruction::Divide => write!(f, "divide"),
-            Instruction::Not => write!(f, "not"),
-            Instruction::Print => write!(f, "print"),
-            Instruction::Return => write!(f, "return"),
-            Instruction::Pop => write!(f, "pop"),
-            Instruction::DefineGlobal(val) => write!(f, "def_global {val}"),
-            Instruction::GetGlobal(val) => write!(f, "get_global {val}"),
-            Instruction::SetGlobal(val) => write!(f, "set_global {val}"),
-        }
-    }
-}
-
 #[derive(Debug)]
 pub enum FetchError {
     Unknown(u8),
