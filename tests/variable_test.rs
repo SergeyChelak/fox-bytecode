@@ -14,7 +14,7 @@ fn global_variables() {
         print b;
     ";
     let probe = interpret_by_probe(src);
-    let output = &["1".to_string(), "2".to_string(), "3".to_string()];
+    let output = &["1", "2", "3"];
     if let Some(err) = probe.borrow().vm_error() {
         panic!("Err: {err}");
     }

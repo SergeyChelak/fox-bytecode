@@ -58,25 +58,15 @@ impl Probe {
         Self::default()
     }
 
-    pub fn assert_output_match(&self, output: &[String]) {
+    pub fn assert_output_match<T: AsRef<str>>(&self, output: &[T]) {
         for (l, r) in self.output_buffer.iter().zip(output.iter()) {
-            assert_eq!(l, r)
+            assert_eq!(l, r.as_ref())
         }
         assert_eq!(
             self.output_buffer.len(),
             output.len(),
             "Output buffer line count mismatch"
         )
-    }
-
-    pub fn is_output_matches(&self, output: &[String]) -> bool {
-        if self.output_buffer.len() != output.len() {
-            return false;
-        }
-        self.output_buffer
-            .iter()
-            .zip(output.iter())
-            .all(|(l, r)| l == r)
     }
 
     pub fn output_to_string(&self) -> String {

@@ -7,7 +7,7 @@ fn math_test() {
         print 2 + 2 * 2;
     ";
     let probe = interpret_by_probe(src);
-    let output = &["6".to_string(), "12".to_string()];
+    let output = &["6"];
     assert!(probe.borrow().vm_error().is_none());
     probe.borrow().assert_output_match(output);
 }

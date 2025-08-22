@@ -126,12 +126,14 @@ impl Machine {
 
     fn set_global(&mut self, index: u8) -> MachineResult<()> {
         let name = self.read_const_string(index)?;
-        println!("set global for '{name}'");
         if !self.globals.contains_key(&name) {
             let message = format!("Undefined variable {}", name);
             return Err(self.runtime_error(&message));
         }
-        let value = self.stack_peek().expect("set_global: no value to push");
+        let Some(value) = self.stack_peek() else {
+            let message = format!("Bug: not value for '{}' variable", name);
+            return Err(self.runtime_error(&message));
+        };
         self.globals.insert(name, value);
         Ok(())
     }
@@ -471,13 +473,7 @@ mod test {
         }
 
         let probe = probe_ref.borrow();
-        if !probe.is_output_matches(buffer_out) {
-            panic!(
-                "Expected: {}\nOutput: {}",
-                buffer_out.join("\n"),
-                probe.output_to_string()
-            );
-        }
+        probe.assert_output_match(buffer_out);
 
         assert!(machine.stack.is_empty());
         Ok(())
