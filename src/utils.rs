@@ -9,13 +9,7 @@ pub struct ErrorInfo {
 }
 
 impl ErrorInfo {
-    pub fn with(elem: Option<Token>, message: &str) -> Self {
-        let Some(token) = elem else {
-            return Self {
-                position: None,
-                message: message.to_string(),
-            };
-        };
+    pub fn with(token: Token, message: &str) -> Self {
         let append = |arr: &mut Vec<String>, value: String| {
             if value.is_empty() {
                 return;

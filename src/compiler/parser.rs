@@ -10,8 +10,8 @@ use crate::{
 };
 
 pub struct Parser {
-    current: Option<Token>,
-    previous: Option<Token>,
+    current: Token,
+    previous: Token,
     scanner: Box<dyn TokenSource>,
     panic_mode: bool,
     chunk: Chunk,
@@ -21,8 +21,8 @@ pub struct Parser {
 impl Parser {
     pub fn with(scanner: Box<dyn TokenSource>) -> Self {
         Self {
-            current: Default::default(),
-            previous: Default::default(),
+            current: Token::undefined(),
+            previous: Token::undefined(),
             scanner,
             panic_mode: false,
             chunk: Chunk::new(),
@@ -71,11 +71,7 @@ impl Parser {
 
     fn parse_variable(&mut self, message: &str) -> u8 {
         self.consume(TokenType::Identifier, message);
-        self.identifier_constant(
-            self.previous
-                .clone()
-                .expect("Bug: previous is nil in parse variable"),
-        )
+        self.identifier_constant(self.previous.clone())
     }
 
     fn identifier_constant(&mut self, token: Token) -> u8 {
@@ -115,11 +111,11 @@ impl Parser {
     }
 
     fn advance(&mut self) {
-        self.previous = self.current.take();
+        self.previous = self.current.clone();
         loop {
             let token = self.scanner.scan_token();
             let is_err = token.is_err();
-            self.current = Some(token);
+            self.current = token;
             if is_err {
                 self.error_at_current("");
             } else {
@@ -158,7 +154,7 @@ impl Parser {
         self.push_error_info(self.previous.clone(), message);
     }
 
-    fn push_error_info(&mut self, elem: Option<Token>, message: &str) {
+    fn push_error_info(&mut self, elem: Token, message: &str) {
         if self.panic_mode {
             return;
         }
@@ -172,9 +168,7 @@ impl Parser {
     }
 
     fn consume<T: AsRef<str>>(&mut self, t_type: TokenType, message: T) {
-        if let Some(cur) = &self.current
-            && cur.t_type == t_type
-        {
+        if self.current.t_type == t_type {
             self.advance();
             return;
         };
@@ -218,11 +212,7 @@ impl Parser {
     fn number(&mut self, _can_assign: bool) {
         // I don't like this approach
         // according to strtod it returns 0.0 as fallback
-        let value = self
-            .previous
-            .as_ref()
-            .and_then(|token| DataType::number_from(&token.text).ok())
-            .unwrap_or(DataType::number(0.0));
+        let value = DataType::number_from(&self.previous.text).unwrap_or(DataType::Number(0.0));
         self.emit_constant(value)
     }
 
@@ -276,22 +266,13 @@ impl Parser {
     }
 
     fn string(&mut self, _can_assign: bool) {
-        let text = self
-            .previous
-            .as_ref()
-            .map(|t| &t.text)
-            .map(|s| &s[1..s.len() - 1])
-            .expect("Bug: failed to extract string value");
+        let s = self.previous.text.as_str();
+        let text = &s[1..s.len() - 1];
         self.emit_constant(DataType::text_from_str(text));
     }
 
     fn variable(&mut self, can_assign: bool) {
-        self.named_variable(
-            self.previous
-                .clone()
-                .expect("Bug: previous token is none while called 'variable'"),
-            can_assign,
-        );
+        self.named_variable(self.previous.clone(), can_assign);
     }
 
     fn named_variable(&mut self, token: Token, can_assign: bool) {
@@ -305,17 +286,11 @@ impl Parser {
     }
 
     fn prev_token_type(&self) -> TokenType {
-        self.previous
-            .as_ref()
-            .map(|t| t.t_type)
-            .expect("Bug: previous token is none")
+        self.previous.t_type
     }
 
     fn cur_token_type(&self) -> TokenType {
-        self.current
-            .as_ref()
-            .map(|t| t.t_type)
-            .expect("Bug: previous token is none")
+        self.current.t_type
     }
 
     fn get_rule(&self, t_type: TokenType) -> ParseRule {
@@ -358,11 +333,7 @@ impl Parser {
     }
 
     fn emit_instruction(&mut self, instruction: &Instruction) {
-        let line = self
-            .previous
-            .as_ref()
-            .map(|x| x.position.line)
-            .unwrap_or_default();
+        let line = self.previous.position.line;
         let bytes: Vec<u8> = instruction.as_vec();
         for byte in bytes.into_iter() {
             self.chunk.write_u8(byte, line);
@@ -446,7 +417,6 @@ impl Default for ParseRule {
 #[cfg(test)]
 mod test_parser {
     use super::*;
-    use crate::utils::CodePosition;
 
     #[test]
     fn emit_unary_chunk() {
@@ -644,22 +614,6 @@ mod test_parser {
 
         fn semicolon() -> Self {
             Self::make(TokenType::Semicolon, ";")
-        }
-
-        fn with_type(t_type: TokenType) -> Self {
-            Self::make(t_type, "")
-        }
-
-        fn make(t_type: TokenType, text: &str) -> Self {
-            let position = CodePosition {
-                line: 0,
-                absolute_index: 0,
-            };
-            Self {
-                t_type,
-                text: text.to_string(),
-                position,
-            }
         }
     }
 }
