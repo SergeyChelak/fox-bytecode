@@ -103,11 +103,15 @@ impl Parser {
     }
 
     fn is_match(&mut self, t_type: TokenType) -> bool {
-        if self.cur_token_type() != t_type {
+        if !self.check(t_type) {
             return false;
         }
         self.advance();
         true
+    }
+
+    fn check(&self, t_type: TokenType) -> bool {
+        self.cur_token_type() == t_type
     }
 
     fn advance(&mut self) {
