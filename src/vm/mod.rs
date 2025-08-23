@@ -69,18 +69,6 @@ impl Probe {
         )
     }
 
-    pub fn output_to_string(&self) -> String {
-        self.output_buffer.join("\n")
-    }
-
-    pub fn vm_error(&self) -> Option<MachineError> {
-        self.vm_error.clone()
-    }
-
-    pub fn has_errors(&self) -> bool {
-        !self.scanner_errors.is_empty() || self.vm_error.is_some()
-    }
-
     pub fn top_error_message(&self) -> Option<&str> {
         if let Some(err) = self.scanner_errors.first() {
             return Some(err.message());

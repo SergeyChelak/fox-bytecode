@@ -109,7 +109,7 @@ fn local_scope_cleanup() {
     ";
     let probe = interpret_using_probe(src);
     let output = &["3", "2", "1"];
-    assert!(!probe.borrow().has_errors());
+    assert_eq!(None, probe.borrow().top_error_message());
     probe.borrow().assert_output_match(output);
 }
 
@@ -132,6 +132,6 @@ fn update_local_variables() {
     ";
     let probe = interpret_using_probe(src);
     let output = &["1", "2", "3", "4", "2"];
-    assert!(!probe.borrow().has_errors());
+    assert_eq!(None, probe.borrow().top_error_message());
     probe.borrow().assert_output_match(output);
 }

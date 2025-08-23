@@ -11,7 +11,7 @@ fn precedence_test() {
     ";
     let probe = interpret_using_probe(src);
     let output = &["6", "8", "2", "3"];
-    assert!(!probe.borrow().has_errors(), "Error found");
+    assert_eq!(None, probe.borrow().top_error_message());
     probe.borrow().assert_output_match(output);
 }
 
@@ -24,6 +24,6 @@ fn unary_precedence() {
     ";
     let probe = interpret_using_probe(src);
     let output = &["0", "4", "-3"];
-    assert!(probe.borrow().vm_error().is_none());
+    assert_eq!(None, probe.borrow().top_error_message());
     probe.borrow().assert_output_match(output);
 }
