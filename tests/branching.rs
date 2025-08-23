@@ -81,10 +81,37 @@ fn while_loop_test() {
             a = a + 1;
         }
         print "Done";
-
     "#;
     let probe = interpret_using_probe(src);
     let output = &["0", "1", "2", "3", "4", "Done"];
+    assert_eq!(None, probe.borrow().top_error_message());
+    probe.borrow().assert_output_match(output);
+}
+
+#[test]
+fn for_loop_test() {
+    let src = r#"
+        // init; condition; modifier
+        for (var i = 0; i < 5; i = i + 1) {
+            print i;
+        }
+        // ; condition; modifier
+        var x = 4;
+        for (;x < 10; x = x + 2) {
+            print x;
+        }
+        // ; condition;
+        var y = 1;
+        for (; y < 10; ) {
+            print y;
+            y = y + y;
+        }
+        print "Done";
+    "#;
+    let probe = interpret_using_probe(src);
+    let output = &[
+        "0", "1", "2", "3", "4", "4", "6", "8", "1", "2", "4", "8", "Done",
+    ];
     assert_eq!(None, probe.borrow().top_error_message());
     probe.borrow().assert_output_match(output);
 }

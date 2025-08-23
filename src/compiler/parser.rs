@@ -119,6 +119,10 @@ impl Parser {
             self.print_statement();
             return;
         }
+        if self.is_match(TokenType::For) {
+            self.for_statement();
+            return;
+        }
         if self.is_match(TokenType::If) {
             self.if_statement();
             return;
@@ -152,6 +156,49 @@ impl Parser {
         for _ in 0..pops {
             self.emit_instruction(&Instruction::Pop);
         }
+    }
+
+    fn for_statement(&mut self) {
+        self.begin_scope();
+        self.consume(TokenType::LeftParenthesis, "Expect '(' after 'for'");
+        if self.is_match(TokenType::Semicolon) {
+            // no initializer
+        } else if self.is_match(TokenType::Var) {
+            self.var_declaration();
+        } else {
+            self.expression_statement();
+        }
+
+        let mut loop_start = self.chunk.len();
+        let mut exit_jump: Option<usize> = None;
+        if !self.is_match(TokenType::Semicolon) {
+            self.expression();
+            self.consume(TokenType::Semicolon, "Expect ';' after loop condition");
+            exit_jump = Some(self.emit_instruction(&Instruction::stub_jump_if_false()));
+            self.emit_instruction(&Instruction::Pop);
+        }
+
+        if !self.is_match(TokenType::RightParenthesis) {
+            let body_jump = self.emit_instruction(&Instruction::stub_jump());
+            let increment_start = self.chunk.len();
+            self.expression();
+            self.emit_instruction(&Instruction::Pop);
+            self.consume(TokenType::RightParenthesis, "Expect ')' after for clauses");
+
+            self.emit_loop(loop_start);
+            loop_start = increment_start;
+            self.patch_jump(body_jump);
+        }
+
+        self.statement();
+        self.emit_loop(loop_start);
+
+        if let Some(exit_jump) = exit_jump {
+            self.patch_jump(exit_jump);
+            self.emit_instruction(&Instruction::Pop); // condition
+        }
+
+        self.end_scope();
     }
 
     fn expression_statement(&mut self) {
