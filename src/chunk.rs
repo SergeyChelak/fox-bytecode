@@ -41,7 +41,7 @@ impl Chunk {
         self.line.get(idx).cloned()
     }
 
-    pub fn offset(&self) -> usize {
+    pub fn len(&self) -> usize {
         self.code.len()
     }
 }

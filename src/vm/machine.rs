@@ -109,6 +109,10 @@ impl Machine {
                     let jump = bytes_to_jump(first, second);
                     self.ip += jump;
                 }
+                Instruction::Loop(first, second) => {
+                    let jump = bytes_to_jump(first, second);
+                    self.ip -= jump;
+                }
             }
         }
         Ok(())

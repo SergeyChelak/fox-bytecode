@@ -123,6 +123,10 @@ impl Parser {
             self.if_statement();
             return;
         }
+        if self.is_match(TokenType::While) {
+            self.while_statement();
+            return;
+        }
         if self.is_match(TokenType::LeftBrace) {
             self.begin_scope();
             self.block();
@@ -174,6 +178,32 @@ impl Parser {
             self.statement();
         }
         self.patch_jump(else_jump);
+    }
+
+    fn while_statement(&mut self) {
+        let loop_start = self.chunk.len();
+        self.consume(TokenType::LeftParenthesis, "Expect '(' after 'while'");
+        self.expression();
+        self.consume(TokenType::RightParenthesis, "Expect ')' after condition");
+
+        let exit_jump = self.emit_instruction(&Instruction::stub_jump_if_false());
+        self.emit_instruction(&Instruction::Pop);
+        self.statement();
+        self.emit_loop(loop_start);
+
+        self.patch_jump(exit_jump);
+        self.emit_instruction(&Instruction::Pop);
+    }
+
+    fn emit_loop(&mut self, loop_start: usize) {
+        let instr = Instruction::Loop(0x0, 0x0);
+        let size = instr.size();
+        let offset = self.chunk.len() - loop_start + size;
+        if offset > u16::MAX as usize {
+            self.error("Loop body too large");
+        }
+        let (f, s) = jump_to_bytes(offset);
+        self.emit_instruction(&Instruction::Loop(f, s));
     }
 
     fn print_statement(&mut self) {
@@ -448,7 +478,7 @@ impl Parser {
     }
 
     fn emit_instruction(&mut self, instruction: &Instruction) -> usize {
-        let start = self.chunk.offset();
+        let start = self.chunk.len();
         let line = self.previous.position.line;
         let bytes: Vec<u8> = instruction.as_vec();
         for byte in bytes.into_iter() {
@@ -465,7 +495,7 @@ impl Parser {
             (res, size)
         };
 
-        let jump = self.chunk.offset() - offset - size;
+        let jump = self.chunk.len() - offset - size;
         if jump > u16::MAX as usize {
             self.error("Too much code to jump over");
         }

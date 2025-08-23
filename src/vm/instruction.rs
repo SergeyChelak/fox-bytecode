@@ -23,6 +23,7 @@ pub const OPCODE_GET_LOCAL: u8 = 19;
 pub const OPCODE_SET_LOCAL: u8 = 20;
 pub const OPCODE_JUMP_IF_FALSE: u8 = 21;
 pub const OPCODE_JUMP: u8 = 22;
+pub const OPCODE_LOOP: u8 = 23;
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Instruction {
@@ -49,6 +50,7 @@ pub enum Instruction {
     SetLocal(u8),
     JumpIfFalse(u8, u8),
     Jump(u8, u8),
+    Loop(u8, u8),
 }
 
 impl Instruction {
@@ -104,9 +106,14 @@ impl Instruction {
             Instruction::SetGlobal(val) => vec![OPCODE_SET_GLOBAL, *val],
             Instruction::GetLocal(val) => vec![OPCODE_GET_LOCAL, *val],
             Instruction::SetLocal(val) => vec![OPCODE_SET_LOCAL, *val],
-            Instruction::JumpIfFalse(low, high) => vec![OPCODE_JUMP_IF_FALSE, *low, *high],
-            Instruction::Jump(low, high) => vec![OPCODE_JUMP, *low, *high],
+            Instruction::JumpIfFalse(f, s) => vec![OPCODE_JUMP_IF_FALSE, *f, *s],
+            Instruction::Jump(f, s) => vec![OPCODE_JUMP, *f, *s],
+            Instruction::Loop(f, s) => vec![OPCODE_LOOP, *f, *s],
         }
+    }
+
+    pub fn size(&self) -> usize {
+        self.as_vec().len()
     }
 
     pub fn fetch(buffer: &[u8], offset: &mut usize) -> FetchResult<Self> {
@@ -165,6 +172,11 @@ impl Instruction {
                 let low = consume(buffer, offset).ok_or(FetchError::Broken)?;
                 let high = consume(buffer, offset).ok_or(FetchError::Broken)?;
                 Ok(Instruction::Jump(low, high))
+            }
+            OPCODE_LOOP => {
+                let low = consume(buffer, offset).ok_or(FetchError::Broken)?;
+                let high = consume(buffer, offset).ok_or(FetchError::Broken)?;
+                Ok(Instruction::Loop(low, high))
             }
             x => Err(FetchError::Unknown(x)),
         }
@@ -243,6 +255,7 @@ mod test {
                 Instruction::JumpIfFalse(58, 42),
             ),
             ([OPCODE_JUMP, 16, 103], Instruction::Jump(16, 103)),
+            ([OPCODE_LOOP, 74, 38], Instruction::Loop(74, 38)),
         ];
         for (inp, exp) in data.iter() {
             let mut offset = 0;

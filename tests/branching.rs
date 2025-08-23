@@ -71,3 +71,20 @@ fn logical_operators_test() {
     assert_eq!(None, probe.borrow().top_error_message());
     probe.borrow().assert_output_match(output);
 }
+
+#[test]
+fn while_loop_test() {
+    let src = r#"
+        var a = 0;
+        while (a < 5) {
+            print a;
+            a = a + 1;
+        }
+        print "Done";
+
+    "#;
+    let probe = interpret_using_probe(src);
+    let output = &["0", "1", "2", "3", "4", "Done"];
+    assert_eq!(None, probe.borrow().top_error_message());
+    probe.borrow().assert_output_match(output);
+}
