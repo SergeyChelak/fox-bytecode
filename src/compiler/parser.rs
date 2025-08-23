@@ -292,6 +292,24 @@ impl Parser {
         self.emit_instruction(&Instruction::Return);
     }
 
+    fn and(&mut self, _can_assign: bool) {
+        let end_jump = self.emit_instruction(&Instruction::stub_jump_if_false());
+        self.emit_instruction(&Instruction::Pop);
+        self.parse_precedence(Precedence::And);
+        self.patch_jump(end_jump);
+    }
+
+    fn or(&mut self, _can_assign: bool) {
+        let else_jump = self.emit_instruction(&Instruction::stub_jump_if_false());
+        let end_jump = self.emit_instruction(&Instruction::stub_jump());
+
+        self.patch_jump(else_jump);
+        self.emit_instruction(&Instruction::Pop);
+
+        self.parse_precedence(Precedence::Or);
+        self.patch_jump(end_jump);
+    }
+
     fn number(&mut self, _can_assign: bool) {
         // I don't like this approach
         // according to strtod it returns 0.0 as fallback
@@ -405,6 +423,8 @@ impl Parser {
             }
             TokenType::String => ParseRule::new(Some(Self::string), None, Precedence::None),
             Identifier => ParseRule::new(Some(Self::variable), None, Precedence::None),
+            And => ParseRule::new(None, Some(Self::and), Precedence::And),
+            Or => ParseRule::new(None, Some(Self::or), Precedence::Or),
             _ => Default::default(),
         }
     }

@@ -46,3 +46,28 @@ fn if_else_statement_test() {
     assert_eq!(None, probe.borrow().top_error_message());
     probe.borrow().assert_output_match(output);
 }
+
+#[test]
+fn logical_operators_test() {
+    let src = r#"
+        // short 'and' eval
+        var a = 1 > 4 and 5 < 10;
+        print a;
+        // long 'and' eval
+        var b = 5 > 10 and 1 > 4;
+        print b;
+        // long 'or' eval
+        var c = 5 > 10 or 5 > 4;
+        print c;
+        // short 'or' eval
+        var d = 4 > 2 or 8 < 11;
+        print d;
+        // precedence
+        var e = 5 < 10 and 4 < 5 or 7 > 8 and 10 > 11;
+        print e;
+    "#;
+    let probe = interpret_using_probe(src);
+    let output = &["false", "false", "true", "true", "true"];
+    assert_eq!(None, probe.borrow().top_error_message());
+    probe.borrow().assert_output_match(output);
+}
