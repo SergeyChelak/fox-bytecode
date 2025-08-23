@@ -85,7 +85,6 @@ impl Machine {
                 Instruction::DefineGlobal(index) => self.define_global(index)?,
                 Instruction::GetGlobal(index) => self.get_global(index)?,
                 Instruction::SetGlobal(index) => self.set_global(index)?,
-
                 Instruction::GetLocal(slot) => {
                     let value = self.stack[slot as usize].clone();
                     self.stack_push(value)?
@@ -95,6 +94,19 @@ impl Machine {
                         return Err(self.runtime_error("Bug: empty stack on 'SetLocal'"));
                     };
                     self.stack[slot as usize] = value;
+                }
+                Instruction::JumpIfFalse(low, high) => {
+                    let jump = ((low as usize) << 8) | (high as usize);
+                    let Some(condition) = self.stack_peek().map(|val| val.as_bool()) else {
+                        return Err(self.runtime_error("Bug: empty stack on 'JIF'"));
+                    };
+                    if !condition {
+                        self.ip += jump;
+                    }
+                }
+                Instruction::Jump(low, high) => {
+                    let jump = ((low as usize) << 8) | (high as usize);
+                    self.ip += jump;
                 }
             }
         }

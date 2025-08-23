@@ -118,6 +118,10 @@ impl Parser {
             self.print_statement();
             return;
         }
+        if self.is_match(TokenType::If) {
+            self.if_statement();
+            return;
+        }
         if self.is_match(TokenType::LeftBrace) {
             self.begin_scope();
             self.block();
@@ -149,6 +153,26 @@ impl Parser {
         self.expression();
         self.consume(TokenType::Semicolon, "Expect ';' after value");
         self.emit_instruction(&Instruction::Pop);
+    }
+
+    fn if_statement(&mut self) {
+        self.consume(TokenType::LeftParenthesis, "Expect '(' after 'if'");
+        self.expression();
+        self.consume(TokenType::RightParenthesis, "Expect ')' after condition");
+
+        let then_jump = self.emit_instruction(&Instruction::stub_jump_if_false());
+        self.emit_instruction(&Instruction::Pop);
+        self.statement();
+
+        let else_jump = self.emit_instruction(&Instruction::stub_jump());
+
+        self.patch_jump(then_jump);
+        self.emit_instruction(&Instruction::Pop);
+
+        if self.is_match(TokenType::Else) {
+            self.statement();
+        }
+        self.patch_jump(else_jump);
     }
 
     fn print_statement(&mut self) {
@@ -412,7 +436,38 @@ impl Parser {
         start
     }
 
-    fn path_instruction(&mut self, instruction: &Instruction, offset: usize) {
+    fn patch_jump(&mut self, offset: usize) {
+        let (fetch_result, size) = {
+            let mut idx = offset;
+            let res = self.chunk.fetch(&mut idx);
+            let size = idx - offset;
+            (res, size)
+        };
+
+        let jump = self.chunk.offset() - offset - size;
+        if jump > u16::MAX as usize {
+            self.error("Too much code to jump over");
+        }
+
+        let low = ((jump >> 8) & 0xff) as u8;
+        let high = (jump & 0xff) as u8;
+
+        let instr = match fetch_result {
+            Ok(Instruction::JumpIfFalse(_, _)) => Instruction::JumpIfFalse(low, high),
+            Ok(Instruction::Jump(_, _)) => Instruction::Jump(low, high),
+            Err(err) => {
+                self.error(&format!("Bug: {err}"));
+                return;
+            }
+            _ => {
+                self.error("Bug: Attempt to patch non-jump instruction in 'path_jump' function");
+                return;
+            }
+        };
+        self.patch_instruction(&instr, offset);
+    }
+
+    fn patch_instruction(&mut self, instruction: &Instruction, offset: usize) {
         let bytes: Vec<u8> = instruction.as_vec();
         for (idx, byte) in bytes.into_iter().enumerate() {
             self.chunk.patch_u8(byte, offset + idx);
@@ -505,7 +560,7 @@ mod test_parser {
         let emit_addr = parser.emit_instruction(&Instruction::Constant(1));
         parser.emit_instruction(&Instruction::Subtract);
         parser.emit_instruction(&Instruction::Return);
-        parser.path_instruction(&Instruction::Constant(2), emit_addr);
+        parser.patch_instruction(&Instruction::Constant(2), emit_addr);
 
         let chunk = parser.chunk;
         let mut offset = 0;

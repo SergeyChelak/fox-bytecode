@@ -21,6 +21,8 @@ pub const OPCODE_GET_GLOBAL: u8 = 17;
 pub const OPCODE_SET_GLOBAL: u8 = 18;
 pub const OPCODE_GET_LOCAL: u8 = 19;
 pub const OPCODE_SET_LOCAL: u8 = 20;
+pub const OPCODE_JUMP_IF_FALSE: u8 = 21;
+pub const OPCODE_JUMP: u8 = 22;
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Instruction {
@@ -45,6 +47,18 @@ pub enum Instruction {
     SetGlobal(u8),
     GetLocal(u8),
     SetLocal(u8),
+    JumpIfFalse(u8, u8),
+    Jump(u8, u8),
+}
+
+impl Instruction {
+    pub fn stub_jump_if_false() -> Self {
+        Self::JumpIfFalse(0xff, 0xff)
+    }
+
+    pub fn stub_jump() -> Self {
+        Self::Jump(0xff, 0xff)
+    }
 }
 
 #[derive(Debug)]
@@ -90,6 +104,8 @@ impl Instruction {
             Instruction::SetGlobal(val) => vec![OPCODE_SET_GLOBAL, *val],
             Instruction::GetLocal(val) => vec![OPCODE_GET_LOCAL, *val],
             Instruction::SetLocal(val) => vec![OPCODE_SET_LOCAL, *val],
+            Instruction::JumpIfFalse(low, high) => vec![OPCODE_JUMP_IF_FALSE, *low, *high],
+            Instruction::Jump(low, high) => vec![OPCODE_JUMP, *low, *high],
         }
     }
 
@@ -140,6 +156,16 @@ impl Instruction {
                 let arg1 = consume(buffer, offset).ok_or(FetchError::Broken)?;
                 Ok(Instruction::SetLocal(arg1))
             }
+            OPCODE_JUMP_IF_FALSE => {
+                let low = consume(buffer, offset).ok_or(FetchError::Broken)?;
+                let high = consume(buffer, offset).ok_or(FetchError::Broken)?;
+                Ok(Instruction::JumpIfFalse(low, high))
+            }
+            OPCODE_JUMP => {
+                let low = consume(buffer, offset).ok_or(FetchError::Broken)?;
+                let high = consume(buffer, offset).ok_or(FetchError::Broken)?;
+                Ok(Instruction::Jump(low, high))
+            }
             x => Err(FetchError::Unknown(x)),
         }
     }
@@ -188,6 +214,42 @@ mod test {
             assert!(instr.is_ok());
             let instr = instr.unwrap();
             assert_eq!(instr, expected.1);
+        }
+    }
+
+    #[test]
+    fn instruction_variable_parse() {
+        let data = [
+            ([OPCODE_DEFINE_GLOBAL, 11], Instruction::DefineGlobal(11)),
+            ([OPCODE_GET_GLOBAL, 42], Instruction::GetGlobal(42)),
+            ([OPCODE_SET_GLOBAL, 31], Instruction::SetGlobal(31)),
+            ([OPCODE_GET_LOCAL, 58], Instruction::GetLocal(58)),
+            ([OPCODE_SET_LOCAL, 6], Instruction::SetLocal(6)),
+        ];
+        for (inp, exp) in data.iter() {
+            let mut offset = 0;
+            let instr = Instruction::fetch(inp, &mut offset);
+            assert!(instr.is_ok());
+            let instr = instr.unwrap();
+            assert_eq!(&instr, exp);
+        }
+    }
+
+    #[test]
+    fn instruction_jump_parse() {
+        let data = [
+            (
+                [OPCODE_JUMP_IF_FALSE, 58, 42],
+                Instruction::JumpIfFalse(58, 42),
+            ),
+            ([OPCODE_JUMP, 16, 103], Instruction::Jump(16, 103)),
+        ];
+        for (inp, exp) in data.iter() {
+            let mut offset = 0;
+            let instr = Instruction::fetch(inp, &mut offset);
+            assert!(instr.is_ok());
+            let instr = instr.unwrap();
+            assert_eq!(&instr, exp);
         }
     }
 
