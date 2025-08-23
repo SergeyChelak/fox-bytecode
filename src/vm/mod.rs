@@ -81,12 +81,12 @@ impl Probe {
         !self.scanner_errors.is_empty() || self.vm_error.is_some()
     }
 
-    pub fn top_error_message(&self) -> Option<String> {
+    pub fn top_error_message(&self) -> Option<&str> {
         if let Some(err) = self.scanner_errors.first() {
-            return Some(err.message().to_string());
+            return Some(err.message());
         }
         if let Some(err) = &self.vm_error {
-            return Some(err.message().to_string());
+            return Some(err.message());
         }
         None
     }

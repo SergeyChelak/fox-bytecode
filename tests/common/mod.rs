@@ -15,9 +15,3 @@ pub fn interpret_using_probe(input: &str) -> Rc<RefCell<Probe>> {
     interpret(code_ref, io_ref.clone());
     io_ref
 }
-
-// clippy doesn't analyze function usage in macro
-#[allow(dead_code)]
-pub fn expected_error_message(message: &str) -> Option<String> {
-    Some(message.to_string())
-}

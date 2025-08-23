@@ -1,4 +1,4 @@
-use crate::common::{expected_error_message, interpret_using_probe};
+use crate::common::interpret_using_probe;
 
 mod common;
 
@@ -54,7 +54,7 @@ fn local_scope_var_duplicate() {
     ";
     let probe = interpret_using_probe(src);
     assert_eq!(
-        expected_error_message("Already a variable with this name in this scope"),
+        Some("Already a variable with this name in this scope"),
         probe.borrow().top_error_message()
     );
 }
@@ -71,7 +71,7 @@ fn local_var_out_of_scope() {
     ";
     let probe = interpret_using_probe(src);
     assert_eq!(
-        expected_error_message("Undefined variable a"),
+        Some("Undefined variable a"),
         probe.borrow().top_error_message()
     );
 }
@@ -86,7 +86,7 @@ fn local_var_own_value_in_init() {
     ";
     let probe = interpret_using_probe(src);
     assert_eq!(
-        expected_error_message("Can't read local variable in its own initializer"),
+        Some("Can't read local variable in its own initializer"),
         probe.borrow().top_error_message()
     );
 }
