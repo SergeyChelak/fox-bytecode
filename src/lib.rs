@@ -4,6 +4,7 @@ mod chunk;
 mod compiler;
 use compiler::*;
 mod data;
+pub use data::DataType;
 mod error_info;
 pub use error_info::*;
 mod utils;

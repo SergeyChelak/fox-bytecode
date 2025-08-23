@@ -24,3 +24,30 @@ fn run_file<T: AsRef<str>>(path: T) {
 fn show_usage() {
     println!("Usage: fox-bytecode <script.fox>");
 }
+
+pub struct SystemIO {
+    formatter: ErrorFormatter,
+}
+
+impl SystemIO {
+    pub fn new(formatter: ErrorFormatter) -> Self {
+        Self { formatter }
+    }
+}
+
+impl MachineIO for SystemIO {
+    fn push_output(&mut self, value: DataType) {
+        println!("{value}");
+    }
+
+    fn set_vm_error(&mut self, error: MachineError) {
+        eprintln!("Runtime error: {error}")
+    }
+
+    fn set_scanner_errors(&mut self, errors: &[ErrorInfo]) {
+        for err in errors {
+            let text = self.formatter.format_error(err);
+            eprintln!("{text}");
+        }
+    }
+}

@@ -1,37 +1,13 @@
-use std::{cell::RefCell, collections::HashMap, fmt::Display, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use crate::{
+    MachineError, MachineResult,
     chunk::Chunk,
     data::{DataOperation, DataType, OperationError},
     vm::{FetchError, Instruction, MachineIO},
 };
 
 const STACK_MAX_SIZE: usize = 256;
-
-#[derive(Debug, Clone)]
-pub struct MachineError {
-    text: String,
-    line_number: Option<usize>,
-}
-
-impl MachineError {
-    pub fn message(&self) -> &str {
-        self.text.as_str()
-    }
-}
-
-impl Display for MachineError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let val = if let Some(num) = self.line_number {
-            &format!("{num}")
-        } else {
-            "???"
-        };
-        write!(f, "[line {val}] {}", self.text)
-    }
-}
-
-pub type MachineResult<T> = Result<T, MachineError>;
 
 pub struct Machine {
     chunk: Chunk,
