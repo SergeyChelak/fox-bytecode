@@ -265,7 +265,7 @@ impl Parser {
     }
 
     fn emit_return(&mut self) {
-        self.emit_instruction(&Instruction::Return)
+        self.emit_instruction(&Instruction::Return);
     }
 
     fn number(&mut self, _can_assign: bool) {
@@ -291,7 +291,7 @@ impl Parser {
             TokenType::Minus => self.emit_instruction(&Instruction::Negate),
             TokenType::Bang => self.emit_instruction(&Instruction::Not),
             _ => unreachable!("unary"),
-        }
+        };
     }
 
     fn binary(&mut self, _can_assign: bool) {
@@ -321,7 +321,7 @@ impl Parser {
             TokenType::True => self.emit_instruction(&Instruction::True),
             TokenType::Nil => self.emit_instruction(&Instruction::Nil),
             _ => unreachable!("literal"),
-        }
+        };
     }
 
     fn string(&mut self, _can_assign: bool) {
@@ -402,18 +402,27 @@ impl Parser {
         idx as u8
     }
 
-    fn emit_instruction(&mut self, instruction: &Instruction) {
+    fn emit_instruction(&mut self, instruction: &Instruction) -> usize {
+        let start = self.chunk.offset();
         let line = self.previous.position.line;
         let bytes: Vec<u8> = instruction.as_vec();
         for byte in bytes.into_iter() {
             self.chunk.write_u8(byte, line);
+        }
+        start
+    }
+
+    fn path_instruction(&mut self, instruction: &Instruction, offset: usize) {
+        let bytes: Vec<u8> = instruction.as_vec();
+        for (idx, byte) in bytes.into_iter().enumerate() {
+            self.chunk.patch_u8(byte, offset + idx);
         }
     }
 
     fn emit_instructions(&mut self, instruction: &[Instruction]) {
         instruction
             .iter()
-            .for_each(|inst| self.emit_instruction(inst));
+            .for_each(|inst| _ = self.emit_instruction(inst));
     }
 }
 
@@ -487,6 +496,31 @@ impl Default for ParseRule {
 #[cfg(test)]
 mod test_parser {
     use super::*;
+
+    #[test]
+    fn patch_instruction() {
+        let mock = ScannerMock::new(vec![]);
+        let mut parser = Parser::with(Box::new(mock));
+        parser.emit_instruction(&Instruction::Add);
+        let emit_addr = parser.emit_instruction(&Instruction::Constant(1));
+        parser.emit_instruction(&Instruction::Subtract);
+        parser.emit_instruction(&Instruction::Return);
+        parser.path_instruction(&Instruction::Constant(2), emit_addr);
+
+        let chunk = parser.chunk;
+        let mut offset = 0;
+        let expected = &[
+            Instruction::Add,
+            Instruction::Constant(2),
+            Instruction::Subtract,
+            Instruction::Return,
+        ];
+        let mut exp_idx = 0;
+        while let Ok(instr) = chunk.fetch(&mut offset) {
+            assert_eq!(instr, expected[exp_idx]);
+            exp_idx += 1;
+        }
+    }
 
     #[test]
     fn emit_unary_chunk() {

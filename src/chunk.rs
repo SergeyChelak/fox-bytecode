@@ -20,6 +20,10 @@ impl Chunk {
         self.line.push(line);
     }
 
+    pub fn patch_u8(&mut self, byte: u8, offset: usize) {
+        self.code[offset] = byte;
+    }
+
     pub fn add_constant(&mut self, value: DataType) -> usize {
         self.constants.push(value);
         self.constants.len() - 1
@@ -35,5 +39,9 @@ impl Chunk {
 
     pub fn line_number(&self, idx: usize) -> Option<usize> {
         self.line.get(idx).cloned()
+    }
+
+    pub fn offset(&self) -> usize {
+        self.code.len()
     }
 }
