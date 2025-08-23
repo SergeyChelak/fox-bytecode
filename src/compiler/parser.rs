@@ -7,6 +7,7 @@ use crate::{
     },
     data::DataType,
     error_info::ErrorInfo,
+    utils::jump_to_bytes,
     vm::Instruction,
 };
 
@@ -468,13 +469,10 @@ impl Parser {
         if jump > u16::MAX as usize {
             self.error("Too much code to jump over");
         }
-
-        let low = ((jump >> 8) & 0xff) as u8;
-        let high = (jump & 0xff) as u8;
-
+        let (first, second) = jump_to_bytes(jump);
         let instr = match fetch_result {
-            Ok(Instruction::JumpIfFalse(_, _)) => Instruction::JumpIfFalse(low, high),
-            Ok(Instruction::Jump(_, _)) => Instruction::Jump(low, high),
+            Ok(Instruction::JumpIfFalse(_, _)) => Instruction::JumpIfFalse(first, second),
+            Ok(Instruction::Jump(_, _)) => Instruction::Jump(first, second),
             Err(err) => {
                 self.error(&format!("Bug: {err}"));
                 return;

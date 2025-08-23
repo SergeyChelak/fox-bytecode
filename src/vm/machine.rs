@@ -4,6 +4,7 @@ use crate::{
     MachineError, MachineResult,
     chunk::Chunk,
     data::{DataOperation, DataType, OperationError},
+    utils::bytes_to_jump,
     vm::{FetchError, Instruction, MachineIO},
 };
 
@@ -95,8 +96,8 @@ impl Machine {
                     };
                     self.stack[slot as usize] = value;
                 }
-                Instruction::JumpIfFalse(low, high) => {
-                    let jump = ((low as usize) << 8) | (high as usize);
+                Instruction::JumpIfFalse(first, second) => {
+                    let jump = bytes_to_jump(first, second);
                     let Some(condition) = self.stack_peek().map(|val| val.as_bool()) else {
                         return Err(self.runtime_error("Bug: empty stack on 'JIF'"));
                     };
@@ -104,8 +105,8 @@ impl Machine {
                         self.ip += jump;
                     }
                 }
-                Instruction::Jump(low, high) => {
-                    let jump = ((low as usize) << 8) | (high as usize);
+                Instruction::Jump(first, second) => {
+                    let jump = bytes_to_jump(first, second);
                     self.ip += jump;
                 }
             }

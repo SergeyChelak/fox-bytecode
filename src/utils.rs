@@ -5,3 +5,14 @@ pub fn file_to_chars<T: AsRef<str>>(path: T) -> std::io::Result<Vec<char>> {
     let code = data.chars().collect::<Vec<_>>();
     Ok(code)
 }
+
+// jump calculations
+pub fn jump_to_bytes(jump: usize) -> (u8, u8) {
+    let first = ((jump >> 8) & 0xff) as u8;
+    let second = (jump & 0xff) as u8;
+    (first, second)
+}
+
+pub fn bytes_to_jump(first: u8, second: u8) -> usize {
+    ((first as usize) << 8) | (second as usize)
+}
