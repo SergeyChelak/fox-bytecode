@@ -80,10 +80,8 @@ impl DataType {
     pub fn add(a: &DataType, b: &DataType) -> Result<DataType, OperationError> {
         match (a, b) {
             (DataType::Number(x), DataType::Number(y)) => Ok(DataType::Number(x + y)),
-            (DataType::Text(x), DataType::Text(y)) => {
-                let mut res = String::new();
-                res.push_str(x.as_str());
-                res.push_str(y.as_str());
+            (DataType::Text(x), val) => {
+                let res = format!("{x}{val}");
                 Ok(DataType::text_from_string(res))
             }
             _ => Err(OperationError::TypeMismatch),
