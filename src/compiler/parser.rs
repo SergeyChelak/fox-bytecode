@@ -242,6 +242,16 @@ impl Parser {
         self.patch_jump(else_jump);
     }
 
+    /// Function implemented according to the book's grammar:
+    /// switchStmt     → "switch" "(" expression ")"
+    ///                  "{" switchCase* defaultCase? "}" ;
+    /// switchCase     → "case" expression ":" statement* ;
+    /// defaultCase    → "default" ":" statement* ;
+    ///
+    /// this isn't mainstream approach to use expressions in switch cases
+    /// because their values are not known at compile time.
+    /// As result, it may lead to unexpected behavior when
+    /// different case entries will be associated with the same value
     fn switch_statement(&mut self) {
         self.consume(TokenType::LeftParenthesis, "Expect '(' after 'if'");
         self.expression();
