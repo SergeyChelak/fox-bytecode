@@ -249,9 +249,9 @@ impl Parser {
         self.statement();
         self.emit_loop(loop_start);
 
-        self.flush_loop();
         self.patch_jump(exit_jump);
         self.emit_instruction(&Instruction::Pop);
+        self.flush_loop();
     }
 
     fn mark_start_loop(&mut self) -> usize {
