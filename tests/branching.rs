@@ -274,7 +274,34 @@ fn continue_outside_loop_test() {
 }
 
 #[test]
-fn switch_test() {
+fn switch_no_default_test() {
+    let src = r#"
+        for (var i = 0; i < 10; i = i + 1) {
+            switch (i) {
+                case 0: {
+                    var tmp = "Zero";
+                    print tmp;
+                }
+                case 1:
+                    print "***";
+                    print "One";
+                    print "***";
+                case 2: print "Two";
+                case 3: print "Three";
+                case 4: print "Four";
+            }
+        }
+        var msg = "Done";
+        print msg;
+    "#;
+    let probe = interpret_using_probe(src);
+    let output = &["Zero", "***", "One", "***", "Two", "Three", "Four", "Done"];
+    assert_eq!(None, probe.borrow().top_error_message());
+    probe.borrow().assert_output_match(output);
+}
+
+#[test]
+fn switch_with_default_test() {
     let src = r#"
         for (var i = 0; i < 10; i = i + 1) {
             switch (i) {
@@ -305,4 +332,65 @@ fn switch_test() {
     ];
     assert_eq!(None, probe.borrow().top_error_message());
     probe.borrow().assert_output_match(output);
+}
+
+#[test]
+fn switch_with_random_default_place_test() {
+    let src = r#"
+        for (var i = 0; i < 10; i = i + 1) {
+            switch (i) {
+                case 0: {
+                    var tmp = "Zero";
+                    print tmp;
+                }
+                default: {
+                    var formatted = "Value " + i;
+                    print formatted;
+                }
+                case 1:
+                    print "***";
+                    print "One";
+                    print "***";
+                case 2: print "Two";
+                case 3: print "Three";
+                case 4: print "Four";
+            }
+        }
+        var msg = "Done";
+        print msg;
+    "#;
+    let probe = interpret_using_probe(src);
+    let output = &[
+        "Zero", "***", "One", "***", "Two", "Three", "Four", "Value 5", "Value 6", "Value 7",
+        "Value 8", "Value 9", "Done",
+    ];
+    assert_eq!(None, probe.borrow().top_error_message());
+    probe.borrow().assert_output_match(output);
+}
+
+#[test]
+fn switch_duplicate_default_test() {
+    let src = r#"
+        var i = 10;
+        switch (i) {
+            case 0: print "Zero";
+            default: {
+                var formatted = "Value " + i;
+                print formatted;
+            }
+            case 1: print "One";
+            case 2: print "Two";
+            case 3: print "Three";
+            case 4: print "Four";
+            default: {
+                var formatted = "Other Value " + i;
+                print formatted;
+            }
+        }
+    "#;
+    let probe = interpret_using_probe(src);
+    assert_eq!(
+        Some("Multiple default labels in one switch"),
+        probe.borrow().top_error_message()
+    );
 }

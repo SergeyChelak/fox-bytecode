@@ -249,6 +249,7 @@ impl Parser {
         self.consume(TokenType::LeftBrace, "Expect '{' after 'switch' statement");
 
         let mut exit_jumps: Vec<usize> = Vec::new();
+        let mut default_offset: Option<usize> = None;
         loop {
             if self.is_match(TokenType::Case) {
                 self.emit_instruction(&Instruction::Duplicate);
@@ -256,20 +257,34 @@ impl Parser {
                 self.consume(TokenType::Colon, "Expect ':' after case expression");
                 self.emit_instruction(&Instruction::Equal);
                 let next_case = self.emit_instruction(&Instruction::stub_jump_if_false());
+                // remove compare result for true/match case
                 self.emit_instruction(&Instruction::Pop);
                 self.switch_branch_statement();
                 let exit_jump = self.emit_instruction(&Instruction::stub_jump());
                 exit_jumps.push(exit_jump);
+                // remove compare result for false case
                 self.patch_jump(next_case);
                 self.emit_instruction(&Instruction::Pop);
             } else if self.is_match(TokenType::DefaultCase) {
+                if default_offset.is_some() {
+                    self.error("Multiple default labels in one switch");
+                }
                 self.consume(TokenType::Colon, "Expect ':' after default case");
+                // jump to end-of-default block
+                let default_exit_jump = self.emit_instruction(&Instruction::stub_jump());
+                default_offset = Some(self.chunk.len());
                 self.switch_branch_statement();
+                let exit_jump = self.emit_instruction(&Instruction::stub_jump());
+                exit_jumps.push(exit_jump);
+                self.patch_jump(default_exit_jump);
             } else {
                 break;
             }
         }
         self.consume(TokenType::RightBrace, "Expect '}' after 'switch' block");
+        if let Some(offset) = default_offset {
+            self.emit_loop(offset);
+        }
         exit_jumps
             .into_iter()
             .for_each(|offset| self.patch_jump(offset));
@@ -326,7 +341,7 @@ impl Parser {
         let size = instr.size();
         let offset = self.chunk.len() - loop_start + size;
         if offset > u16::MAX as usize {
-            self.error("Loop body too large");
+            self.error("Jump size is too large");
         }
         let (f, s) = jump_to_bytes(offset);
         self.emit_instruction(&Instruction::Loop(f, s));
