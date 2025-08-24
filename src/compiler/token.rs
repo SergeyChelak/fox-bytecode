@@ -37,6 +37,7 @@ pub enum TokenType {
     Number,
     // Keywords
     And,
+    Break,
     Class,
     Continue,
     Else,

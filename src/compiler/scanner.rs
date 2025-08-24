@@ -136,6 +136,7 @@ impl Scanner {
         use TokenType::*;
         let t_type = match value.as_str() {
             "and" => And,
+            "break" => Break,
             "class" => Class,
             "continue" => Continue,
             "else" => Else,
@@ -373,6 +374,7 @@ mod test {
         use TokenType::*;
         let cases = [
             ("and", And),
+            ("break", Break),
             ("class", Class),
             ("continue", Continue),
             ("else", Else),

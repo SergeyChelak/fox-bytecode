@@ -121,6 +121,10 @@ impl Parser {
             self.print_statement();
             return;
         }
+        if self.is_match(TokenType::Break) {
+            self.break_statement();
+            return;
+        }
         if self.is_match(TokenType::Continue) {
             self.continue_statement();
             return;
@@ -198,13 +202,13 @@ impl Parser {
 
         self.statement();
         self.emit_loop(loop_start);
-        self.flush_loop();
 
         if let Some(exit_jump) = exit_jump {
             self.patch_jump(exit_jump);
             self.emit_instruction(&Instruction::Pop); // condition
         }
 
+        self.flush_loop();
         self.end_scope();
     }
 
@@ -244,22 +248,27 @@ impl Parser {
         self.emit_instruction(&Instruction::Pop);
         self.statement();
         self.emit_loop(loop_start);
-        self.flush_loop();
 
+        self.flush_loop();
         self.patch_jump(exit_jump);
         self.emit_instruction(&Instruction::Pop);
     }
 
     fn mark_start_loop(&mut self) -> usize {
         let start = self.chunk.len();
-        let data = LoopData { start };
+        let data = LoopData::new(start);
         self.loop_stack.push(data);
         start
     }
 
     fn flush_loop(&mut self) {
-        let val = self.loop_stack.pop();
-        assert!(val.is_some());
+        let Some(val) = self.loop_stack.pop() else {
+            self.error("Bug: loop_stack is broken");
+            return;
+        };
+        for exit_jump in val.breaks {
+            self.patch_jump(exit_jump);
+        }
     }
 
     fn emit_loop(&mut self, loop_start: usize) {
@@ -276,10 +285,24 @@ impl Parser {
     fn continue_statement(&mut self) {
         self.consume(TokenType::Semicolon, "Expect ';' after 'continue'");
         let Some(data) = self.loop_stack.last() else {
-            self.error("Continue statement allowed inside loops only");
+            self.error("'continue' statement allowed inside loops only");
             return;
         };
         self.emit_loop(data.start);
+    }
+
+    fn break_statement(&mut self) {
+        self.consume(TokenType::Semicolon, "Expect ';' after 'break'");
+        if self.loop_stack.is_empty() {
+            self.error("'break' statement allowed inside loops only");
+        }
+        let offset = self.emit_instruction(&Instruction::stub_jump());
+        self.emit_instruction(&Instruction::Pop);
+        let Some(data) = self.loop_stack.last_mut() else {
+            self.error("Bug: loop stack became empty");
+            return;
+        };
+        data.breaks.push(offset);
     }
 
     fn print_statement(&mut self) {
@@ -674,6 +697,16 @@ impl Default for ParseRule {
 
 struct LoopData {
     start: usize,
+    breaks: Vec<usize>,
+}
+
+impl LoopData {
+    fn new(start: usize) -> Self {
+        Self {
+            start,
+            breaks: Default::default(),
+        }
+    }
 }
 
 #[cfg(test)]

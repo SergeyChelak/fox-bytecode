@@ -87,7 +87,10 @@ impl Machine {
                 Instruction::GetGlobal(index) => self.get_global(index)?,
                 Instruction::SetGlobal(index) => self.set_global(index)?,
                 Instruction::GetLocal(slot) => {
-                    let value = self.stack[slot as usize].clone();
+                    let Some(value) = self.stack.get(slot as usize).cloned() else {
+                        let msg = format!("Bug: failed to get local value with '{:?}'", instr);
+                        return Err(self.runtime_error(msg));
+                    };
                     self.stack_push(value)?
                 }
                 Instruction::SetLocal(slot) => {
