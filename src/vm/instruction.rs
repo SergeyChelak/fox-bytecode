@@ -24,6 +24,7 @@ pub const OPCODE_SET_LOCAL: u8 = 20;
 pub const OPCODE_JUMP_IF_FALSE: u8 = 21;
 pub const OPCODE_JUMP: u8 = 22;
 pub const OPCODE_LOOP: u8 = 23;
+pub const OPCODE_DUPLICATE: u8 = 24;
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Instruction {
@@ -51,6 +52,7 @@ pub enum Instruction {
     JumpIfFalse(u8, u8),
     Jump(u8, u8),
     Loop(u8, u8),
+    Duplicate,
 }
 
 impl Instruction {
@@ -109,6 +111,7 @@ impl Instruction {
             Instruction::JumpIfFalse(f, s) => vec![OPCODE_JUMP_IF_FALSE, *f, *s],
             Instruction::Jump(f, s) => vec![OPCODE_JUMP, *f, *s],
             Instruction::Loop(f, s) => vec![OPCODE_LOOP, *f, *s],
+            Instruction::Duplicate => vec![OPCODE_DUPLICATE],
         }
     }
 
@@ -178,6 +181,7 @@ impl Instruction {
                 let high = consume(buffer, offset).ok_or(FetchError::Broken)?;
                 Ok(Instruction::Loop(low, high))
             }
+            OPCODE_DUPLICATE => Ok(Instruction::Duplicate),
             x => Err(FetchError::Unknown(x)),
         }
     }
@@ -217,6 +221,7 @@ mod test {
             (OPCODE_LESS, Instruction::Less),
             (OPCODE_GREATER, Instruction::Greater),
             (OPCODE_EQUAL, Instruction::Equal),
+            (OPCODE_DUPLICATE, Instruction::Duplicate),
         ];
         let buffer = data.iter().map(|(opcode, _)| *opcode).collect::<Vec<_>>();
         let mut offset = 0;

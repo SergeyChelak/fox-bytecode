@@ -102,7 +102,7 @@ impl Machine {
                 Instruction::JumpIfFalse(first, second) => {
                     let jump = bytes_to_jump(first, second);
                     let Some(condition) = self.stack_peek().map(|val| val.as_bool()) else {
-                        return Err(self.runtime_error("Bug: empty stack on 'JIF'"));
+                        return Err(self.runtime_error("Bug: empty stack on 'JumpIfFalse'"));
                     };
                     if !condition {
                         self.ip += jump;
@@ -115,6 +115,12 @@ impl Machine {
                 Instruction::Loop(first, second) => {
                     let jump = bytes_to_jump(first, second);
                     self.ip -= jump;
+                }
+                Instruction::Duplicate => {
+                    let Some(value) = self.stack_peek().clone() else {
+                        return Err(self.runtime_error("Bug: empty stack on 'Duplicate' call"));
+                    };
+                    self.stack_push(value)?;
                 }
             }
         }
@@ -423,6 +429,18 @@ mod test {
             chunk,
             &[DataType::number(6.0), DataType::number(3.0)],
             &[DataType::number(2.0)],
+            &[],
+        )
+    }
+
+    #[test]
+    fn operation_duplicate() -> MachineResult<()> {
+        let mut chunk = Chunk::new();
+        chunk.write_u8(OPCODE_DUPLICATE, 1);
+        machine_test(
+            chunk,
+            &[DataType::number(6.0)],
+            &[DataType::number(6.0), DataType::number(6.0)],
             &[],
         )
     }

@@ -272,3 +272,37 @@ fn continue_outside_loop_test() {
         probe.borrow().top_error_message()
     );
 }
+
+#[test]
+fn switch_test() {
+    let src = r#"
+        for (var i = 0; i < 10; i = i + 1) {
+            switch (i) {
+                case 0: {
+                    var tmp = "Zero";
+                    print tmp;
+                }
+                case 1:
+                    print "***";
+                    print "One";
+                    print "***";
+                case 2: print "Two";
+                case 3: print "Three";
+                case 4: print "Four";
+                default: {
+                    var formatted = "Value " + i;
+                    print formatted;
+                }
+            }
+        }
+        var msg = "Done";
+        print msg;
+    "#;
+    let probe = interpret_using_probe(src);
+    let output = &[
+        "Zero", "***", "One", "***", "Two", "Three", "Four", "Value 5", "Value 6", "Value 7",
+        "Value 8", "Value 9", "Done",
+    ];
+    assert_eq!(None, probe.borrow().top_error_message());
+    probe.borrow().assert_output_match(output);
+}

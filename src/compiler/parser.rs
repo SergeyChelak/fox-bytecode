@@ -137,6 +137,10 @@ impl Parser {
             self.if_statement();
             return;
         }
+        if self.is_match(TokenType::Switch) {
+            self.switch_statement();
+            return;
+        }
         if self.is_match(TokenType::While) {
             self.while_statement();
             return;
@@ -236,6 +240,52 @@ impl Parser {
             self.statement();
         }
         self.patch_jump(else_jump);
+    }
+
+    fn switch_statement(&mut self) {
+        self.consume(TokenType::LeftParenthesis, "Expect '(' after 'if'");
+        self.expression();
+        self.consume(TokenType::RightParenthesis, "Expect ')' after condition");
+        self.consume(TokenType::LeftBrace, "Expect '{' after 'switch' statement");
+
+        let mut exit_jumps: Vec<usize> = Vec::new();
+        loop {
+            if self.is_match(TokenType::Case) {
+                self.emit_instruction(&Instruction::Duplicate);
+                self.expression();
+                self.consume(TokenType::Colon, "Expect ':' after case expression");
+                self.emit_instruction(&Instruction::Equal);
+                let next_case = self.emit_instruction(&Instruction::stub_jump_if_false());
+                self.emit_instruction(&Instruction::Pop);
+                self.switch_branch_statement();
+                let exit_jump = self.emit_instruction(&Instruction::stub_jump());
+                exit_jumps.push(exit_jump);
+                self.patch_jump(next_case);
+                self.emit_instruction(&Instruction::Pop);
+            } else if self.is_match(TokenType::DefaultCase) {
+                self.consume(TokenType::Colon, "Expect ':' after default case");
+                self.switch_branch_statement();
+            } else {
+                break;
+            }
+        }
+        self.consume(TokenType::RightBrace, "Expect '}' after 'switch' block");
+        exit_jumps
+            .into_iter()
+            .for_each(|offset| self.patch_jump(offset));
+    }
+
+    fn switch_branch_statement(&mut self) {
+        self.emit_instruction(&Instruction::Pop);
+        loop {
+            match self.cur_token_type() {
+                TokenType::Case
+                | TokenType::DefaultCase
+                | TokenType::RightBrace
+                | TokenType::Eof => break,
+                _ => self.statement(),
+            }
+        }
     }
 
     fn while_statement(&mut self) {
