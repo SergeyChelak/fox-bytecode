@@ -19,6 +19,7 @@ pub struct Parser {
     chunk: Chunk,
     errors: Vec<ErrorInfo>,
     scope: Scope,
+    loop_stack: Vec<LoopData>,
 }
 
 impl Parser {
@@ -31,6 +32,7 @@ impl Parser {
             chunk: Chunk::new(),
             errors: Default::default(),
             scope: Default::default(),
+            loop_stack: Default::default(),
         }
     }
 
@@ -119,6 +121,10 @@ impl Parser {
             self.print_statement();
             return;
         }
+        if self.is_match(TokenType::Continue) {
+            self.continue_statement();
+            return;
+        }
         if self.is_match(TokenType::For) {
             self.for_statement();
             return;
@@ -169,7 +175,7 @@ impl Parser {
             self.expression_statement();
         }
 
-        let mut loop_start = self.chunk.len();
+        let mut loop_start = self.mark_start_loop();
         let mut exit_jump: Option<usize> = None;
         if !self.is_match(TokenType::Semicolon) {
             self.expression();
@@ -192,6 +198,7 @@ impl Parser {
 
         self.statement();
         self.emit_loop(loop_start);
+        self.flush_loop();
 
         if let Some(exit_jump) = exit_jump {
             self.patch_jump(exit_jump);
@@ -228,7 +235,7 @@ impl Parser {
     }
 
     fn while_statement(&mut self) {
-        let loop_start = self.chunk.len();
+        let loop_start = self.mark_start_loop();
         self.consume(TokenType::LeftParenthesis, "Expect '(' after 'while'");
         self.expression();
         self.consume(TokenType::RightParenthesis, "Expect ')' after condition");
@@ -237,9 +244,22 @@ impl Parser {
         self.emit_instruction(&Instruction::Pop);
         self.statement();
         self.emit_loop(loop_start);
+        self.flush_loop();
 
         self.patch_jump(exit_jump);
         self.emit_instruction(&Instruction::Pop);
+    }
+
+    fn mark_start_loop(&mut self) -> usize {
+        let start = self.chunk.len();
+        let data = LoopData { start };
+        self.loop_stack.push(data);
+        start
+    }
+
+    fn flush_loop(&mut self) {
+        let val = self.loop_stack.pop();
+        assert!(val.is_some());
     }
 
     fn emit_loop(&mut self, loop_start: usize) {
@@ -251,6 +271,15 @@ impl Parser {
         }
         let (f, s) = jump_to_bytes(offset);
         self.emit_instruction(&Instruction::Loop(f, s));
+    }
+
+    fn continue_statement(&mut self) {
+        self.consume(TokenType::Semicolon, "Expect ';' after 'continue'");
+        let Some(data) = self.loop_stack.last() else {
+            self.error("Continue statement allowed inside loops only");
+            return;
+        };
+        self.emit_loop(data.start);
     }
 
     fn print_statement(&mut self) {
@@ -641,6 +670,10 @@ impl Default for ParseRule {
             infix: Default::default(),
         }
     }
+}
+
+struct LoopData {
+    start: usize,
 }
 
 #[cfg(test)]

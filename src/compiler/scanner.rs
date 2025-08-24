@@ -137,6 +137,7 @@ impl Scanner {
         let t_type = match value.as_str() {
             "and" => And,
             "class" => Class,
+            "continue" => Continue,
             "else" => Else,
             "false" => False,
             "for" => For,
@@ -373,6 +374,7 @@ mod test {
         let cases = [
             ("and", And),
             ("class", Class),
+            ("continue", Continue),
             ("else", Else),
             ("false", False),
             ("for", For),

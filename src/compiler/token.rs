@@ -38,6 +38,7 @@ pub enum TokenType {
     // Keywords
     And,
     Class,
+    Continue,
     Else,
     False,
     Fun,
