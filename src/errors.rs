@@ -1,6 +1,6 @@
 use std::rc::Rc;
 
-use crate::compiler::Token;
+use crate::frontend::Token;
 
 #[derive(Debug, Clone)]
 pub struct ErrorInfo {

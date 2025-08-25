@@ -2,8 +2,8 @@ use std::{cell::RefCell, rc::Rc};
 
 mod data;
 pub use data::*;
-mod compiler;
-use compiler::*;
+mod frontend;
+use frontend::*;
 mod errors;
 pub use errors::*;
 mod utils;

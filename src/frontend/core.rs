@@ -1,6 +1,6 @@
 use crate::{
     ErrorInfo, Instruction, Value,
-    compiler::{
+    frontend::{
         Token, TokenType,
         compiler::{Compiler, Local},
         rule::Precedence,
@@ -739,7 +739,7 @@ impl LoopData {
 #[cfg(test)]
 mod tests {
 
-    use crate::compiler::scanner::tests::ScannerMock;
+    use crate::frontend::scanner::tests::ScannerMock;
 
     use super::*;
 

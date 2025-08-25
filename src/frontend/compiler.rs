@@ -1,4 +1,4 @@
-use crate::{Chunk, FetchResult, Func, FuncType, Instruction, Value, compiler::Token};
+use crate::{Chunk, FetchResult, Func, FuncType, Instruction, Value, frontend::Token};
 
 pub const MAX_SCOPE_SIZE: usize = 256;
 
