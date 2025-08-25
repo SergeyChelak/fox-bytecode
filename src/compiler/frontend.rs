@@ -184,7 +184,45 @@ mod tests {
     use super::*;
 
     #[test]
-    fn advance_test() {}
+    fn advance_test_normal() {
+        let mut frontend = compose_frontend_with_tokens(vec![Token::minus(), Token::number("123")]);
+        frontend.advance();
+        assert_eq!(frontend.parser.previous, Token::undefined());
+        assert_eq!(frontend.parser.current, Token::minus());
+    }
+
+    #[test]
+    fn advance_test_error() {
+        let mut frontend =
+            compose_frontend_with_tokens(vec![Token::error("wrong"), Token::number("123")]);
+        assert!(!frontend.panic_mode);
+        frontend.advance();
+        assert_eq!(frontend.parser.previous, Token::undefined());
+        assert_eq!(frontend.parser.current, Token::number("123"));
+        assert!(frontend.panic_mode);
+    }
+
+    #[test]
+    fn match_test_true() {
+        let mut frontend =
+            compose_frontend_with_tokens(vec![Token::plus(), Token::minus(), Token::number("123")]);
+        // call advance to fill initial undefined token's value
+        frontend.advance();
+        assert!(frontend.is_match(TokenType::Plus));
+        assert_eq!(frontend.parser.previous, Token::plus());
+        assert_eq!(frontend.parser.current, Token::minus());
+    }
+
+    #[test]
+    fn match_test_false() {
+        let mut frontend =
+            compose_frontend_with_tokens(vec![Token::plus(), Token::minus(), Token::number("123")]);
+        // call advance to fill initial undefined token's value
+        frontend.advance();
+        assert!(!frontend.is_match(TokenType::False));
+        assert_eq!(frontend.parser.previous, Token::undefined());
+        assert_eq!(frontend.parser.current, Token::plus());
+    }
 
     //
     fn compose_frontend_with_tokens(tokens: Vec<Token>) -> Frontend {

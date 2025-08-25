@@ -1,6 +1,6 @@
 use crate::errors::CodePosition;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Token {
     pub t_type: TokenType,
     pub text: String,
@@ -94,6 +94,10 @@ mod tests {
     use super::*;
 
     impl Token {
+        pub fn error(message: &str) -> Self {
+            Self::make(TokenType::Error, message)
+        }
+
         pub fn eof() -> Self {
             Self::with_type(TokenType::Eof)
         }

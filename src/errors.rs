@@ -95,7 +95,7 @@ impl ErrorInfo {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct CodePosition {
     pub line: usize,
     pub absolute_index: usize,
