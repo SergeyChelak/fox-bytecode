@@ -8,8 +8,8 @@ mod errors;
 pub use errors::*;
 mod utils;
 pub use utils::file_to_chars;
-mod vm;
-pub use vm::*;
+mod backend;
+pub use backend::*;
 
 pub fn interpret(code_ref: Rc<Vec<char>>, io: Rc<RefCell<dyn MachineIO>>) {
     let result = compile(code_ref.clone());

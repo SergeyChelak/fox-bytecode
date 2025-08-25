@@ -1,8 +1,9 @@
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
-use crate::{MachineError, MachineResult, data::*, utils::bytes_to_jump, vm::MachineIO};
+use crate::{MachineError, MachineResult, backend::MachineIO, data::*, utils::bytes_to_jump};
 
-const STACK_MAX_SIZE: usize = 256;
+const FRAMES_MAX: usize = 64;
+const STACK_MAX_SIZE: usize = FRAMES_MAX * UINT8_COUNT;
 
 pub struct Machine {
     chunk: Chunk,
@@ -217,7 +218,7 @@ impl Machine {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::vm::*;
+    use crate::backend::*;
 
     #[test]
     fn operation_negate() -> MachineResult<()> {

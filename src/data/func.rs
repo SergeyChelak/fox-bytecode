@@ -21,8 +21,11 @@ impl Func {
 
 impl Display for Func {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let name = self.name.as_deref().unwrap_or("**global**");
-        write!(f, "<fn {name}>")
+        if let Some(name) = &self.name {
+            write!(f, "<fn {name}>")
+        } else {
+            write!(f, "<script>")
+        }
     }
 }
 

@@ -7,3 +7,5 @@ pub use chunk::Chunk;
 pub use func::*;
 pub use instruction::*;
 pub use value::{OperationError, Value, ValueOperation};
+
+pub const UINT8_COUNT: usize = 256;

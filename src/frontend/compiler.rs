@@ -1,6 +1,6 @@
-use crate::{Chunk, FetchResult, Func, FuncType, Instruction, Value, frontend::Token};
+use crate::{Chunk, FetchResult, Func, FuncType, Instruction, UINT8_COUNT, Value, frontend::Token};
 
-pub const MAX_SCOPE_SIZE: usize = 256;
+pub const MAX_SCOPE_SIZE: usize = UINT8_COUNT;
 
 pub struct Compiler {
     func: Box<Func>,
@@ -14,7 +14,8 @@ impl Compiler {
         Self {
             func: Default::default(),
             func_type: FuncType::Script,
-            locals: Default::default(),
+            locals: Vec::new(),
+            // locals: vec![Local::reserved()],
             depth: Default::default(),
         }
     }
@@ -30,9 +31,9 @@ impl Compiler {
         self.func.chunk_mut()
     }
 
-    // pub fn function(self) -> Func {
-    //     *self.func
-    // }
+    pub fn function(self) -> Func {
+        *self.func
+    }
 
     pub fn chunk_position(&self) -> usize {
         self.func.chunk().size()
@@ -155,6 +156,13 @@ pub struct Local {
 impl Local {
     pub fn with_name(name: String) -> Self {
         Self { name, depth: None }
+    }
+
+    fn reserved() -> Self {
+        Self {
+            name: "".to_string(),
+            depth: Some(0),
+        }
     }
 }
 
