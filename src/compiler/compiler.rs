@@ -1,29 +1,26 @@
-use crate::{
-    Chunk, ErrorCollector, Func, FuncType, Instruction, Value,
-    compiler::{Local, LocalVariableInfo, MAX_SCOPE_SIZE, Token},
-    utils::{Shared, jump_to_bytes},
-};
+use crate::{Chunk, FetchResult, Func, FuncType, Instruction, Value, compiler::Token};
+
+pub const MAX_SCOPE_SIZE: usize = 256;
 
 pub struct Compiler {
     func: Box<Func>,
     func_type: FuncType,
     locals: Vec<Local>,
     depth: usize,
-    error_collector: Shared<ErrorCollector>,
 }
 
 impl Compiler {
-    pub fn new(error_collector: Shared<ErrorCollector>) -> Self {
+    pub fn new() -> Self {
         Self {
             func: Default::default(),
             func_type: FuncType::Script,
             locals: Default::default(),
             depth: Default::default(),
-            error_collector,
         }
     }
 }
 
+/// Shorthands
 impl Compiler {
     pub fn chunk(&self) -> &Chunk {
         self.func.chunk()
@@ -33,49 +30,19 @@ impl Compiler {
         self.func.chunk_mut()
     }
 
-    pub fn function(self) -> Func {
-        *self.func
-    }
+    // pub fn function(self) -> Func {
+    //     *self.func
+    // }
 
     pub fn chunk_position(&self) -> usize {
         self.func.chunk().size()
     }
 }
 
+/// Code generation functions
 impl Compiler {
-    pub fn make_constant(&mut self, value: Value) -> u8 {
-        let idx = self.chunk_mut().add_constant(value);
-        if idx > u8::MAX as usize {
-            self.error_collector
-                .borrow_mut()
-                .error("Too many constants in one chunk");
-            // don't think it's a good decision
-            // but this index seems doesn't reachable
-            return 0;
-        }
-        idx as u8
-    }
-
-    pub fn emit_constant(&mut self, value: Value, line: usize) {
-        let idx = self.make_constant(value);
-        self.emit_instruction_at_line(&Instruction::Constant(idx), line);
-    }
-
-    pub fn emit_loop(&mut self, loop_start: usize, line: usize) {
-        let instr = Instruction::Loop(0x0, 0x0);
-        let size = instr.size();
-        let offset = self.chunk_position() - loop_start + size;
-        if offset > u16::MAX as usize {
-            self.error_collector
-                .borrow_mut()
-                .error("Jump size is too large");
-        }
-        let (f, s) = jump_to_bytes(offset);
-        self.emit_instruction_at_line(&Instruction::Loop(f, s), line);
-    }
-
-    pub fn emit_return(&mut self, line: usize) {
-        self.emit_instruction_at_line(&Instruction::Return, line);
+    pub fn add_constant(&mut self, value: Value) -> usize {
+        self.chunk_mut().add_constant(value)
     }
 
     pub fn emit_instruction_at_line(&mut self, instruction: &Instruction, line: usize) -> usize {
@@ -94,41 +61,15 @@ impl Compiler {
         }
     }
 
-    pub fn patch_jump(&mut self, offset: usize) {
-        let (fetch_result, size) = {
-            let mut idx = offset;
-            let res = self.chunk().fetch(&mut idx);
-            let size = idx - offset;
-            (res, size)
-        };
-
-        let jump = self.chunk_position() - offset - size;
-        if jump > u16::MAX as usize {
-            self.error_collector
-                .borrow_mut()
-                .error("Too much code to jump over");
-        }
-        let (first, second) = jump_to_bytes(jump);
-        let instr = match fetch_result {
-            Ok(Instruction::JumpIfFalse(_, _)) => Instruction::JumpIfFalse(first, second),
-            Ok(Instruction::Jump(_, _)) => Instruction::Jump(first, second),
-            Err(err) => {
-                self.error_collector
-                    .borrow_mut()
-                    .error(&format!("Bug: {err}"));
-                return;
-            }
-            _ => {
-                self.error_collector
-                    .borrow_mut()
-                    .error("Bug: Attempt to patch non-jump instruction in 'path_jump' function");
-                return;
-            }
-        };
-        self.patch_instruction(&instr, offset);
+    pub fn fetch_instruction(&self, offset: usize) -> (FetchResult<Instruction>, usize) {
+        let mut idx = offset;
+        let res = self.chunk().fetch(&mut idx);
+        let size = idx - offset;
+        (res, size)
     }
 }
 
+/// Scope management functions
 impl Compiler {
     pub fn begin_scope(&mut self) {
         self.depth += 1;
@@ -154,7 +95,7 @@ impl Compiler {
         self.locals.len() < MAX_SCOPE_SIZE
     }
 
-    pub fn push(&mut self, local: Local) {
+    pub fn push_local(&mut self, local: Local) {
         self.locals.push(local);
     }
 
@@ -201,23 +142,37 @@ impl Compiler {
     }
 }
 
+pub struct LocalVariableInfo {
+    pub index: u8,
+    pub depth: Option<usize>,
+}
+
+pub struct Local {
+    name: String,
+    depth: Option<usize>,
+}
+
+impl Local {
+    pub fn with_name(name: String) -> Self {
+        Self { name, depth: None }
+    }
+}
+
 #[cfg(test)]
 mod test {
-    use crate::utils::shared;
 
     use super::*;
 
     #[test]
     fn patch_instruction() {
-        let error_collector = shared(ErrorCollector::new());
-        let mut parser = Compiler::new(error_collector);
-        parser.emit_instruction_at_line(&Instruction::Add, 0);
-        let emit_addr = parser.emit_instruction_at_line(&Instruction::Constant(1), 0);
-        parser.emit_instruction_at_line(&Instruction::Subtract, 0);
-        parser.emit_instruction_at_line(&Instruction::Return, 0);
-        parser.patch_instruction(&Instruction::Constant(2), emit_addr);
+        let mut compiler = Compiler::new();
+        compiler.emit_instruction_at_line(&Instruction::Add, 0);
+        let emit_addr = compiler.emit_instruction_at_line(&Instruction::Constant(1), 0);
+        compiler.emit_instruction_at_line(&Instruction::Subtract, 0);
+        compiler.emit_instruction_at_line(&Instruction::Return, 0);
+        compiler.patch_instruction(&Instruction::Constant(2), emit_addr);
 
-        let chunk = parser.chunk();
+        let chunk = compiler.chunk();
         let mut offset = 0;
         let expected = &[
             Instruction::Add,

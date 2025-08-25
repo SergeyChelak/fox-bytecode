@@ -2,65 +2,6 @@ use std::rc::Rc;
 
 use crate::compiler::Token;
 
-pub struct ErrorCollector {
-    errors: Vec<ErrorInfo>,
-    current: Token,
-    previous: Token,
-    panic_mode: bool,
-}
-
-impl ErrorCollector {
-    pub fn new() -> Self {
-        Self {
-            errors: Default::default(),
-            current: Token::undefined(),
-            previous: Token::undefined(),
-            panic_mode: false,
-        }
-    }
-
-    pub fn has_errors(&self) -> bool {
-        !self.errors.is_empty()
-    }
-
-    pub fn errors(&self) -> &Vec<ErrorInfo> {
-        &self.errors
-    }
-
-    pub fn update_previous_token(&mut self, token: Token) {
-        self.previous = token;
-    }
-
-    pub fn update_current_token(&mut self, token: Token) {
-        self.current = token;
-    }
-
-    pub fn reset_panic(&mut self) {
-        self.panic_mode = false;
-    }
-
-    pub fn is_panic(&self) -> bool {
-        self.panic_mode
-    }
-
-    pub fn error_at_current(&mut self, message: &str) {
-        self.push_error_info(self.current.clone(), message);
-    }
-
-    pub fn error(&mut self, message: &str) {
-        self.push_error_info(self.previous.clone(), message);
-    }
-
-    fn push_error_info(&mut self, elem: Token, message: &str) {
-        if self.panic_mode {
-            return;
-        }
-        self.panic_mode = true;
-        let info = ErrorInfo::with(elem, message);
-        self.errors.push(info);
-    }
-}
-
 #[derive(Debug, Clone)]
 pub struct ErrorInfo {
     position: Option<CodePosition>,

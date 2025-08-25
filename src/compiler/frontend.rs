@@ -1,38 +1,58 @@
 use crate::{
     ErrorInfo, Instruction, Value,
     compiler::{
-        Local, LocalVariableInfo, MAX_SCOPE_SIZE, Token, TokenType, rule::Precedence,
+        Token, TokenType,
+        compiler::{Compiler, Local},
+        rule::Precedence,
         scanner::TokenSource,
     },
+    utils::jump_to_bytes,
 };
 
 type ParseRule = super::rule::ParseRule<Frontend>;
 
 pub struct Frontend {
-    parser: Parser,
+    current: Token,
+    previous: Token,
     compiler: Compiler,
     scanner: Box<dyn TokenSource>,
     panic_mode: bool,
     errors: Vec<ErrorInfo>,
+    loop_stack: Vec<LoopData>,
 }
 
 impl Frontend {
-    pub fn compile(&mut self) {
+    pub fn new(scanner: Box<dyn TokenSource>) -> Self {
+        Self {
+            current: Token::undefined(),
+            previous: Token::undefined(),
+            compiler: Compiler::new(),
+            scanner,
+            panic_mode: false,
+            errors: Vec::new(),
+            loop_stack: Vec::new(),
+        }
+    }
+
+    pub fn compile(mut self) -> Result<Compiler, Vec<ErrorInfo>> {
         self.advance();
         while !self.is_match(TokenType::Eof) {
             self.declaration();
         }
         self.end_compiler();
-        todo!("check if error list empty, return valid value otherwise errors")
+        if self.errors.is_empty() {
+            return Ok(self.compiler);
+        }
+        Err(self.errors)
     }
 
     fn advance(&mut self) {
-        self.parser.update_previous();
+        self.update_previous();
         let mut looping = true;
         while looping {
             let token = self.scanner.scan_token();
             let is_err = token.is_err();
-            self.parser.set_current(token);
+            self.set_current(token);
             if is_err {
                 self.error_at_current("");
             }
@@ -366,7 +386,23 @@ impl Frontend {
     }
 
     fn if_statement(&mut self) {
-        todo!()
+        self.consume(TokenType::LeftParenthesis, "Expect '(' after 'if'");
+        self.expression();
+        self.consume(TokenType::RightParenthesis, "Expect ')' after condition");
+
+        let then_jump = self.emit_instruction(&Instruction::stub_jump_if_false());
+        self.emit_instruction(&Instruction::Pop);
+        self.statement();
+
+        let else_jump = self.emit_instruction(&Instruction::stub_jump());
+
+        self.patch_jump(then_jump);
+        self.emit_instruction(&Instruction::Pop);
+
+        if self.is_match(TokenType::Else) {
+            self.statement();
+        }
+        self.patch_jump(else_jump);
     }
 
     /// Function implemented according to the book's grammar:
@@ -380,23 +416,164 @@ impl Frontend {
     /// As result, it may lead to unexpected behavior when
     /// different case entries will be associated with the same value
     fn switch_statement(&mut self) {
-        todo!()
+        self.consume(TokenType::LeftParenthesis, "Expect '(' after 'if'");
+        self.expression();
+        self.consume(TokenType::RightParenthesis, "Expect ')' after condition");
+        self.consume(TokenType::LeftBrace, "Expect '{' after 'switch' statement");
+
+        let mut exit_jumps: Vec<usize> = Vec::new();
+        let mut default_offset: Option<usize> = None;
+        loop {
+            if self.is_match(TokenType::Case) {
+                self.emit_instruction(&Instruction::Duplicate);
+                self.expression();
+                self.consume(TokenType::Colon, "Expect ':' after case expression");
+                self.emit_instruction(&Instruction::Equal);
+                let next_case = self.emit_instruction(&Instruction::stub_jump_if_false());
+                // remove compare result for true/match case
+                self.emit_instruction(&Instruction::Pop);
+                self.switch_branch_statement();
+                let exit_jump = self.emit_instruction(&Instruction::stub_jump());
+                exit_jumps.push(exit_jump);
+                // remove compare result for false case
+                self.patch_jump(next_case);
+                self.emit_instruction(&Instruction::Pop);
+            } else if self.is_match(TokenType::DefaultCase) {
+                if default_offset.is_some() {
+                    self.error("Multiple default labels in one switch");
+                }
+                self.consume(TokenType::Colon, "Expect ':' after default case");
+                // jump to end-of-default block
+                let default_exit_jump = self.emit_instruction(&Instruction::stub_jump());
+                default_offset = Some(self.chunk_position());
+                self.switch_branch_statement();
+                let exit_jump = self.emit_instruction(&Instruction::stub_jump());
+                exit_jumps.push(exit_jump);
+                self.patch_jump(default_exit_jump);
+            } else {
+                break;
+            }
+        }
+        self.consume(TokenType::RightBrace, "Expect '}' after 'switch' block");
+        if let Some(offset) = default_offset {
+            self.emit_loop(offset);
+        }
+        exit_jumps
+            .into_iter()
+            .for_each(|offset| self.patch_jump(offset));
+    }
+
+    fn switch_branch_statement(&mut self) {
+        self.emit_instruction(&Instruction::Pop);
+        loop {
+            match self.cur_token_type() {
+                TokenType::Case
+                | TokenType::DefaultCase
+                | TokenType::RightBrace
+                | TokenType::Eof => break,
+                _ => self.statement(),
+            }
+        }
     }
 
     fn while_statement(&mut self) {
-        todo!()
+        let loop_start = self.mark_start_loop();
+        self.consume(TokenType::LeftParenthesis, "Expect '(' after 'while'");
+        self.expression();
+        self.consume(TokenType::RightParenthesis, "Expect ')' after condition");
+
+        let exit_jump = self.emit_instruction(&Instruction::stub_jump_if_false());
+        self.emit_instruction(&Instruction::Pop);
+        self.statement();
+        self.emit_loop(loop_start);
+
+        self.patch_jump(exit_jump);
+        self.emit_instruction(&Instruction::Pop);
+        self.flush_loop();
     }
 
     fn for_statement(&mut self) {
-        todo!()
+        self.begin_scope();
+        self.consume(TokenType::LeftParenthesis, "Expect '(' after 'for'");
+        if self.is_match(TokenType::Semicolon) {
+            // no initializer
+        } else if self.is_match(TokenType::Var) {
+            self.var_declaration();
+        } else {
+            self.expression_statement();
+        }
+
+        let mut loop_start = self.mark_start_loop();
+        let mut exit_jump: Option<usize> = None;
+        if !self.is_match(TokenType::Semicolon) {
+            self.expression();
+            self.consume(TokenType::Semicolon, "Expect ';' after loop condition");
+            exit_jump = Some(self.emit_instruction(&Instruction::stub_jump_if_false()));
+            self.emit_instruction(&Instruction::Pop);
+        }
+
+        if !self.is_match(TokenType::RightParenthesis) {
+            let body_jump = self.emit_instruction(&Instruction::stub_jump());
+            let increment_start = self.chunk_position();
+            self.expression();
+            self.emit_instruction(&Instruction::Pop);
+            self.consume(TokenType::RightParenthesis, "Expect ')' after for clauses");
+
+            self.emit_loop(loop_start);
+            loop_start = increment_start;
+            self.patch_jump(body_jump);
+        }
+
+        self.statement();
+        self.emit_loop(loop_start);
+
+        if let Some(exit_jump) = exit_jump {
+            self.patch_jump(exit_jump);
+            self.emit_instruction(&Instruction::Pop); // condition
+        }
+
+        self.flush_loop();
+        self.end_scope();
     }
 
     fn break_statement(&mut self) {
-        todo!()
+        self.consume(TokenType::Semicolon, "Expect ';' after 'break'");
+        if self.loop_stack.is_empty() {
+            self.error("'break' statement allowed inside loops only");
+        }
+        let offset = self.emit_instruction(&Instruction::stub_jump());
+        self.emit_instruction(&Instruction::Pop);
+        let Some(data) = self.loop_stack.last_mut() else {
+            self.error("Bug: loop stack became empty");
+            return;
+        };
+        data.breaks.push(offset);
     }
 
     fn continue_statement(&mut self) {
-        todo!()
+        self.consume(TokenType::Semicolon, "Expect ';' after 'continue'");
+        let Some(data) = self.loop_stack.last() else {
+            self.error("'continue' statement allowed inside loops only");
+            return;
+        };
+        self.emit_loop(data.start);
+    }
+
+    fn mark_start_loop(&mut self) -> usize {
+        let start = self.chunk_position();
+        let data = LoopData::new(start);
+        self.loop_stack.push(data);
+        start
+    }
+
+    fn flush_loop(&mut self) {
+        let Some(val) = self.loop_stack.pop() else {
+            self.error("Bug: loop_stack is broken");
+            return;
+        };
+        for exit_jump in val.breaks {
+            self.patch_jump(exit_jump);
+        }
     }
 
     fn begin_scope(&mut self) {
@@ -411,7 +588,7 @@ impl Frontend {
     }
 
     fn end_scope(&mut self) {
-        self.compiler.end_scope(self.parser.get_line());
+        self.compiler.end_scope(self.get_line());
     }
 
     fn print_statement(&mut self) {
@@ -424,20 +601,28 @@ impl Frontend {
 /// Emit functions
 impl Frontend {
     fn make_constant(&mut self, value: Value) -> u8 {
-        todo!()
+        let idx = self.compiler.add_constant(value);
+        if idx > u8::MAX as usize {
+            self.error("Too many constants in one chunk");
+            // don't think it's a good decision
+            // but this index seems doesn't reachable
+            return 0;
+        }
+        idx as u8
     }
 
-    fn emit_constant(&mut self, value: Value) -> usize {
-        todo!()
-    }
-
-    fn emit_instruction(&mut self, instruction: &Instruction) -> usize {
-        let line = self.parser.get_line();
-        self.compiler.emit_instruction_at_line(instruction, line)
+    fn emit_constant(&mut self, value: Value) {
+        let idx = self.make_constant(value);
+        self.emit_instruction(&Instruction::Constant(idx));
     }
 
     fn emit_return(&mut self) -> usize {
         self.emit_instruction(&Instruction::Return)
+    }
+
+    fn emit_instruction(&mut self, instruction: &Instruction) -> usize {
+        let line = self.get_line();
+        self.compiler.emit_instruction_at_line(instruction, line)
     }
 
     fn emit_instructions(&mut self, instruction: &[Instruction]) {
@@ -446,15 +631,49 @@ impl Frontend {
             .for_each(|inst| _ = self.emit_instruction(inst));
     }
 
-    fn patch_jump(&mut self, offset: usize) {
-        todo!()
+    fn emit_loop(&mut self, loop_start: usize) {
+        let instr = Instruction::Loop(0x0, 0x0);
+        let size = instr.size();
+        let offset = self.chunk_position() - loop_start + size;
+        if offset > u16::MAX as usize {
+            self.error("Jump size is too large");
+        }
+        let (f, s) = jump_to_bytes(offset);
+        self.emit_instruction(&Instruction::Loop(f, s));
+    }
+
+    pub fn patch_jump(&mut self, offset: usize) {
+        let (fetch_result, size) = self.compiler.fetch_instruction(offset);
+
+        let jump = self.chunk_position() - offset - size;
+        if jump > u16::MAX as usize {
+            self.error("Too much code to jump over");
+        }
+        let (first, second) = jump_to_bytes(jump);
+        let instr = match fetch_result {
+            Ok(Instruction::JumpIfFalse(_, _)) => Instruction::JumpIfFalse(first, second),
+            Ok(Instruction::Jump(_, _)) => Instruction::Jump(first, second),
+            Err(err) => {
+                self.error(&format!("Bug: {err}"));
+                return;
+            }
+            _ => {
+                self.error("Bug: Attempt to patch non-jump instruction in 'path_jump' function");
+                return;
+            }
+        };
+        self.compiler.patch_instruction(&instr, offset);
+    }
+
+    fn chunk_position(&self) -> usize {
+        self.compiler.chunk_position()
     }
 }
 
 // Errors
 impl Frontend {
     fn error_at_current(&mut self, message: &str) {
-        self.push_error_info(self.parser.current.clone(), message);
+        self.push_error_info(self.current.clone(), message);
     }
 
     fn error(&mut self, message: &str) {
@@ -475,33 +694,11 @@ impl Frontend {
 /// Shorthands
 impl Frontend {
     fn prev_token_owned(&self) -> Token {
-        self.parser.previous.clone()
+        self.previous.clone()
     }
 
     fn prev_token_text(&self) -> &str {
-        &self.parser.previous.text
-    }
-
-    fn cur_token_type(&self) -> TokenType {
-        self.parser.cur_token_type()
-    }
-
-    fn prev_token_type(&self) -> TokenType {
-        self.parser.prev_token_type()
-    }
-}
-
-struct Parser {
-    current: Token,
-    previous: Token,
-}
-
-impl Parser {
-    fn new() -> Self {
-        Self {
-            current: Token::undefined(),
-            previous: Token::undefined(),
-        }
+        &self.previous.text
     }
 
     fn set_current(&mut self, token: Token) {
@@ -525,61 +722,17 @@ impl Parser {
     }
 }
 
-struct Compiler {
-    depth: usize,
-    locals: Vec<Local>,
+struct LoopData {
+    start: usize,
+    breaks: Vec<usize>,
 }
 
-impl Compiler {
-    fn new() -> Self {
+impl LoopData {
+    fn new(start: usize) -> Self {
         Self {
-            depth: 0,
-            locals: Default::default(),
+            start,
+            breaks: Default::default(),
         }
-    }
-
-    pub fn emit_instruction_at_line(&mut self, instruction: &Instruction, line: usize) -> usize {
-        todo!()
-    }
-
-    // scope management
-    pub fn begin_scope(&mut self) {
-        todo!()
-    }
-
-    pub fn end_scope(&mut self, line: usize) {
-        todo!()
-    }
-
-    pub fn is_local_scope(&self) -> bool {
-        self.depth > 0
-    }
-
-    pub fn is_global_scope(&self) -> bool {
-        self.depth == 0
-    }
-
-    pub fn has_declared_variable(&self, token: &Token) -> bool {
-        todo!()
-    }
-
-    pub fn has_capacity(&self) -> bool {
-        self.locals.len() < MAX_SCOPE_SIZE
-    }
-
-    pub fn push_local(&mut self, local: Local) {
-        self.locals.push(local);
-    }
-
-    pub fn mark_initialized(&mut self) {
-        let Some(local) = self.locals.last_mut() else {
-            panic!();
-        };
-        local.depth = Some(self.depth);
-    }
-
-    pub fn resolve_local(&self, token: &Token) -> Option<LocalVariableInfo> {
-        todo!()
     }
 }
 
@@ -594,8 +747,8 @@ mod tests {
     fn advance_test_normal() {
         let mut frontend = compose_frontend_with_tokens(vec![Token::minus(), Token::number("123")]);
         frontend.advance();
-        assert_eq!(frontend.parser.previous, Token::undefined());
-        assert_eq!(frontend.parser.current, Token::minus());
+        assert_eq!(frontend.previous, Token::undefined());
+        assert_eq!(frontend.current, Token::minus());
     }
 
     #[test]
@@ -604,8 +757,8 @@ mod tests {
             compose_frontend_with_tokens(vec![Token::error("wrong"), Token::number("123")]);
         assert!(!frontend.panic_mode);
         frontend.advance();
-        assert_eq!(frontend.parser.previous, Token::undefined());
-        assert_eq!(frontend.parser.current, Token::number("123"));
+        assert_eq!(frontend.previous, Token::undefined());
+        assert_eq!(frontend.current, Token::number("123"));
         assert!(frontend.panic_mode);
     }
 
@@ -616,8 +769,8 @@ mod tests {
         // call advance to fill initial undefined token's value
         frontend.advance();
         assert!(frontend.is_match(TokenType::Plus));
-        assert_eq!(frontend.parser.previous, Token::plus());
-        assert_eq!(frontend.parser.current, Token::minus());
+        assert_eq!(frontend.previous, Token::plus());
+        assert_eq!(frontend.current, Token::minus());
     }
 
     #[test]
@@ -627,8 +780,8 @@ mod tests {
         // call advance to fill initial undefined token's value
         frontend.advance();
         assert!(!frontend.is_match(TokenType::False));
-        assert_eq!(frontend.parser.previous, Token::undefined());
-        assert_eq!(frontend.parser.current, Token::plus());
+        assert_eq!(frontend.previous, Token::undefined());
+        assert_eq!(frontend.current, Token::plus());
     }
 
     #[test]
@@ -637,13 +790,13 @@ mod tests {
             compose_frontend_with_tokens(vec![Token::plus(), Token::minus(), Token::number("123")]);
         frontend.advance();
         frontend.advance();
-        assert_eq!(frontend.prev_token_type(), frontend.parser.previous.t_type);
-        assert_eq!(frontend.cur_token_type(), frontend.parser.current.t_type);
+        assert_eq!(frontend.prev_token_type(), frontend.previous.t_type);
+        assert_eq!(frontend.cur_token_type(), frontend.current.t_type);
 
         assert_eq!(frontend.prev_token_type(), TokenType::Plus);
         assert_eq!(frontend.cur_token_type(), TokenType::Minus);
 
-        assert_eq!(frontend.prev_token_owned(), frontend.parser.previous);
+        assert_eq!(frontend.prev_token_owned(), frontend.previous);
     }
 
     //
@@ -653,12 +806,148 @@ mod tests {
     }
 
     fn compose_frontend(scanner: Box<dyn TokenSource>) -> Frontend {
-        Frontend {
-            parser: Parser::new(),
-            compiler: Compiler::new(),
-            scanner,
-            panic_mode: false,
-            errors: Vec::new(),
+        Frontend::new(scanner)
+    }
+
+    // legacy test group
+
+    #[test]
+    fn emit_unary_chunk() {
+        let input = vec![Token::minus(), Token::number("12.345"), Token::semicolon()];
+        let expectation = Expectation {
+            constants: vec![Value::number(12.345)],
+            instructions: vec![Instruction::Constant(0), Instruction::Negate],
+        };
+        state_expectation_test(input, expectation);
+    }
+
+    #[test]
+    fn emit_binary_chunk() {
+        let data = [
+            (
+                Token::make(TokenType::BangEqual, "!="),
+                vec![Instruction::Equal, Instruction::Not],
+            ),
+            (
+                Token::make(TokenType::EqualEqual, "=="),
+                vec![Instruction::Equal],
+            ),
+            (
+                Token::make(TokenType::Greater, ">"),
+                vec![Instruction::Greater],
+            ),
+            (
+                Token::make(TokenType::GreaterEqual, ">="),
+                vec![Instruction::Less, Instruction::Not],
+            ),
+            (Token::make(TokenType::Less, "<"), vec![Instruction::Less]),
+            (
+                Token::make(TokenType::LessEqual, "<="),
+                vec![Instruction::Greater, Instruction::Not],
+            ),
+            (Token::minus(), vec![Instruction::Subtract]),
+            (Token::plus(), vec![Instruction::Add]),
+            (Token::multiply(), vec![Instruction::Multiply]),
+            (Token::divide(), vec![Instruction::Divide]),
+        ];
+        for (token, expected_instr) in data {
+            let input = vec![
+                Token::number("3"),
+                token,
+                Token::number("5.0"),
+                Token::semicolon(),
+            ];
+            let mut instructions = vec![Instruction::Constant(0), Instruction::Constant(1)];
+
+            for exp_instr in expected_instr {
+                instructions.push(exp_instr.clone());
+            }
+            let expectation = Expectation {
+                constants: vec![Value::number(3.0), Value::number(5.0)],
+                instructions,
+            };
+            state_expectation_test(input, expectation);
         }
+    }
+
+    #[test]
+    fn emit_literal_chunk() {
+        let tokens = vec![
+            (Token::make(TokenType::False, "false"), Instruction::False),
+            (Token::make(TokenType::True, "true"), Instruction::True),
+            (Token::make(TokenType::Nil, "nil"), Instruction::Nil),
+        ];
+        for (token, emitted) in tokens {
+            let expectation = Expectation {
+                constants: Vec::new(),
+                instructions: vec![emitted],
+            };
+            state_expectation_test(vec![token, Token::semicolon()], expectation);
+        }
+    }
+
+    #[test]
+    fn emit_grouping_chunk() {
+        // 3 * (5 + 7)
+        let input = vec![
+            Token::number("3"),
+            Token::multiply(),
+            Token::with_type(TokenType::LeftParenthesis),
+            Token::number("5.0"),
+            Token::plus(),
+            Token::number("7"),
+            Token::with_type(TokenType::RightParenthesis),
+            Token::semicolon(),
+        ];
+
+        let expectation = Expectation {
+            constants: vec![Value::number(3.0), Value::number(5.0), Value::number(7.0)],
+            instructions: vec![
+                Instruction::Constant(0),
+                Instruction::Constant(1),
+                Instruction::Constant(2),
+                Instruction::Add,
+                Instruction::Multiply,
+            ],
+        };
+
+        state_expectation_test(input, expectation);
+    }
+
+    #[test]
+    fn emit_string_constant() {
+        let input = vec![
+            Token::make(TokenType::String, "\"Text\""),
+            Token::semicolon(),
+        ];
+        let expectation = Expectation {
+            constants: vec![Value::text_from_str("Text")],
+            instructions: vec![],
+        };
+        state_expectation_test(input, expectation);
+    }
+
+    fn state_expectation_test(input: Vec<Token>, expectation: Expectation) {
+        let mock = ScannerMock::new(input);
+        let parser = Frontend::new(Box::new(mock));
+        let compiler = parser.compile().expect("Failed to perform expectation");
+
+        for (i, x) in expectation.constants.iter().enumerate() {
+            assert_eq!(compiler.chunk().read_const(i as u8), Some(x.clone()));
+        }
+
+        let mut offset = 0;
+        for instr_exp in expectation.instructions {
+            let instr = compiler
+                .chunk()
+                .fetch(&mut offset)
+                .expect("Failed to fetch instruction");
+            assert_eq!(instr, instr_exp);
+        }
+    }
+
+    struct Expectation {
+        constants: Vec<Value>,
+        instructions: Vec<Instruction>,
     }
 }

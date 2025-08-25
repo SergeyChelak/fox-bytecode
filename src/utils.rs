@@ -1,4 +1,4 @@
-use std::{cell::RefCell, rc::Rc};
+// use std::{cell::RefCell, rc::Rc};
 
 // IO
 pub fn file_to_chars<T: AsRef<str>>(path: T) -> std::io::Result<Vec<char>> {
@@ -20,8 +20,8 @@ pub fn bytes_to_jump(first: u8, second: u8) -> usize {
 }
 
 //
-pub type Shared<T> = Rc<RefCell<T>>;
+// pub type Shared<T> = Rc<RefCell<T>>;
 
-pub fn shared<T>(value: T) -> Shared<T> {
-    Rc::new(RefCell::new(value))
-}
+// pub fn shared<T>(value: T) -> Shared<T> {
+//     Rc::new(RefCell::new(value))
+// }
