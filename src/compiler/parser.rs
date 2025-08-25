@@ -6,7 +6,6 @@ use crate::{
         token::{Token, TokenType},
     },
     data::{Chunk, Instruction, Value},
-    errors::ErrorInfo,
     utils::{Shared, jump_to_bytes},
 };
 
@@ -21,14 +20,18 @@ pub struct Parser {
 }
 
 impl Parser {
-    pub fn with(scanner: Box<dyn TokenSource>, error_collector: Shared<ErrorCollector>) -> Self {
+    pub fn with(
+        scanner: Box<dyn TokenSource>,
+        error_collector: Shared<ErrorCollector>,
+        compiler: Compiler,
+    ) -> Self {
         Self {
             current: Token::undefined(),
             previous: Token::undefined(),
             scanner,
             error_collector,
             chunk: Chunk::new(),
-            compiler: Default::default(),
+            compiler,
             loop_stack: Default::default(),
         }
     }
@@ -814,9 +817,7 @@ mod test_parser {
 
     #[test]
     fn patch_instruction() {
-        let mock = ScannerMock::new(vec![]);
-        let ec = shared(ErrorCollector::new());
-        let mut parser = Parser::with(Box::new(mock), ec);
+        let (mut parser, _) = make_parser(vec![]);
         parser.emit_instruction(&Instruction::Add);
         let emit_addr = parser.emit_instruction(&Instruction::Constant(1));
         parser.emit_instruction(&Instruction::Subtract);
@@ -955,10 +956,7 @@ mod test_parser {
     }
 
     fn state_expectation_test(input: Vec<Token>, expectation: Expectation) {
-        let mock = ScannerMock::new(input);
-        let ec = shared(ErrorCollector::new());
-        let parser = Parser::with(Box::new(mock), ec.clone());
-
+        let (parser, ec) = make_parser(input);
         let chunk = parser.compile();
 
         if ec.borrow().has_errors() {
@@ -1031,6 +1029,13 @@ mod test_parser {
         fn semicolon() -> Self {
             Self::make(TokenType::Semicolon, ";")
         }
+    }
+
+    fn make_parser(tokens: Vec<Token>) -> (Parser, Shared<ErrorCollector>) {
+        let mock = ScannerMock::new(tokens);
+        let ec = shared(ErrorCollector::new());
+        let compiler = Compiler::new(ec.clone());
+        (Parser::with(Box::new(mock), ec.clone(), compiler), ec)
     }
 }
 

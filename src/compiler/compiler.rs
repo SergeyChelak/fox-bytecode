@@ -1,4 +1,8 @@
-use crate::{Chunk, Func, FuncType, Instruction, Value, compiler::Token, utils::jump_to_bytes};
+use crate::{
+    Chunk, ErrorCollector, Func, FuncType, Instruction, Value,
+    compiler::Token,
+    utils::{Shared, jump_to_bytes},
+};
 
 const MAX_SCOPE_SIZE: usize = 256;
 
@@ -7,25 +11,26 @@ pub struct LocalVariableInfo {
     pub depth: Option<usize>,
 }
 
-// #[derive(Default)]
 pub struct Compiler {
     func: Box<Func>,
     func_type: FuncType,
     locals: Vec<Local>,
     depth: usize,
+    error_collector: Shared<ErrorCollector>,
 }
 
-impl Default for Compiler {
-    fn default() -> Self {
+impl Compiler {
+    pub fn new(error_collector: Shared<ErrorCollector>) -> Self {
         Self {
             func: Default::default(),
             func_type: FuncType::Script,
             locals: Default::default(),
             depth: Default::default(),
+            error_collector,
         }
     }
 }
-/*
+
 impl Compiler {
     pub fn chunk(&self) -> &Chunk {
         self.func.chunk()
@@ -44,13 +49,13 @@ impl Compiler {
     }
 }
 
-
-// TODO: move to compiler
 impl Compiler {
     fn make_constant(&mut self, value: Value) -> u8 {
         let idx = self.chunk_mut().add_constant(value);
         if idx > u8::MAX as usize {
-            self.error("Too many constants in one chunk");
+            self.error_collector
+                .borrow_mut()
+                .error("Too many constants in one chunk");
             // don't think it's a good decision
             // but this index seems doesn't reachable
             return 0;
@@ -68,7 +73,9 @@ impl Compiler {
         let size = instr.size();
         let offset = self.chunk_position() - loop_start + size;
         if offset > u16::MAX as usize {
-            self.error("Jump size is too large");
+            self.error_collector
+                .borrow_mut()
+                .error("Jump size is too large");
         }
         let (f, s) = jump_to_bytes(offset);
         self.emit_instruction_at_line(&Instruction::Loop(f, s), line);
@@ -104,25 +111,31 @@ impl Compiler {
 
         let jump = self.chunk_position() - offset - size;
         if jump > u16::MAX as usize {
-            self.error("Too much code to jump over");
+            self.error_collector
+                .borrow_mut()
+                .error("Too much code to jump over");
         }
         let (first, second) = jump_to_bytes(jump);
         let instr = match fetch_result {
             Ok(Instruction::JumpIfFalse(_, _)) => Instruction::JumpIfFalse(first, second),
             Ok(Instruction::Jump(_, _)) => Instruction::Jump(first, second),
             Err(err) => {
-                self.error(&format!("Bug: {err}"));
+                self.error_collector
+                    .borrow_mut()
+                    .error(&format!("Bug: {err}"));
                 return;
             }
             _ => {
-                self.error("Bug: Attempt to patch non-jump instruction in 'path_jump' function");
+                self.error_collector
+                    .borrow_mut()
+                    .error("Bug: Attempt to patch non-jump instruction in 'path_jump' function");
                 return;
             }
         };
         self.patch_instruction(&instr, offset);
     }
 }
- */
+
 impl Compiler {
     pub fn begin_scope(&mut self) {
         self.depth += 1;
