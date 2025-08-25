@@ -1,12 +1,6 @@
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
-use crate::{
-    MachineError, MachineResult,
-    data::Chunk,
-    data::{OperationError, Value, ValueOperation},
-    utils::bytes_to_jump,
-    vm::{FetchError, Instruction, MachineIO},
-};
+use crate::{MachineError, MachineResult, data::*, utils::bytes_to_jump, vm::MachineIO};
 
 const STACK_MAX_SIZE: usize = 256;
 

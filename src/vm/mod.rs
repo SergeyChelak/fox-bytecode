@@ -1,8 +1,5 @@
-mod instruction;
-
 use std::fmt::Display;
 
-pub use instruction::*;
 mod probe;
 pub use probe::*;
 mod machine;

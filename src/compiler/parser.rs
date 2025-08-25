@@ -4,11 +4,9 @@ use crate::{
         scope::{Local, Scope},
         token::{Token, TokenType},
     },
-    data::Chunk,
-    data::Value,
+    data::{Chunk, Instruction, Value},
     error_info::ErrorInfo,
     utils::jump_to_bytes,
-    vm::Instruction,
 };
 
 pub struct Parser {

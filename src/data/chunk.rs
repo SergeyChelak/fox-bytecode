@@ -1,7 +1,4 @@
-use crate::{
-    Value,
-    vm::{FetchResult, Instruction},
-};
+use crate::{FetchResult, Instruction, Value};
 
 #[derive(Default)]
 pub struct Chunk {
