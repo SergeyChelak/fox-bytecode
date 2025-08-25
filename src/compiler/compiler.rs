@@ -50,7 +50,7 @@ impl Compiler {
 }
 
 impl Compiler {
-    fn make_constant(&mut self, value: Value) -> u8 {
+    pub fn make_constant(&mut self, value: Value) -> u8 {
         let idx = self.chunk_mut().add_constant(value);
         if idx > u8::MAX as usize {
             self.error_collector
@@ -63,12 +63,12 @@ impl Compiler {
         idx as u8
     }
 
-    fn emit_constant(&mut self, value: Value, line: usize) {
+    pub fn emit_constant(&mut self, value: Value, line: usize) {
         let idx = self.make_constant(value);
         self.emit_instruction_at_line(&Instruction::Constant(idx), line);
     }
 
-    fn emit_loop(&mut self, loop_start: usize, line: usize) {
+    pub fn emit_loop(&mut self, loop_start: usize, line: usize) {
         let instr = Instruction::Loop(0x0, 0x0);
         let size = instr.size();
         let offset = self.chunk_position() - loop_start + size;
@@ -81,11 +81,11 @@ impl Compiler {
         self.emit_instruction_at_line(&Instruction::Loop(f, s), line);
     }
 
-    fn emit_return(&mut self, line: usize) {
+    pub fn emit_return(&mut self, line: usize) {
         self.emit_instruction_at_line(&Instruction::Return, line);
     }
 
-    fn emit_instruction_at_line(&mut self, instruction: &Instruction, line: usize) -> usize {
+    pub fn emit_instruction_at_line(&mut self, instruction: &Instruction, line: usize) -> usize {
         let start = self.chunk_position();
         let bytes: Vec<u8> = instruction.as_vec();
         for byte in bytes.into_iter() {
@@ -94,14 +94,14 @@ impl Compiler {
         start
     }
 
-    fn patch_instruction(&mut self, instruction: &Instruction, offset: usize) {
+    pub fn patch_instruction(&mut self, instruction: &Instruction, offset: usize) {
         let bytes: Vec<u8> = instruction.as_vec();
         for (idx, byte) in bytes.into_iter().enumerate() {
             self.chunk_mut().patch_u8(byte, offset + idx);
         }
     }
 
-    fn patch_jump(&mut self, offset: usize) {
+    pub fn patch_jump(&mut self, offset: usize) {
         let (fetch_result, size) = {
             let mut idx = offset;
             let res = self.chunk().fetch(&mut idx);
@@ -141,14 +141,12 @@ impl Compiler {
         self.depth += 1;
     }
 
-    pub fn end_scope(&mut self) -> usize {
+    pub fn end_scope(&mut self, line: usize) {
         self.depth -= 1;
-        let mut pop_count = 0;
         while self.is_last_out_of_scope() {
-            pop_count += 1;
+            self.emit_instruction_at_line(&Instruction::Pop, line);
             self.locals.pop();
         }
-        pop_count
     }
 
     pub fn is_global_scope(&self) -> bool {
@@ -218,5 +216,37 @@ pub struct Local {
 impl Local {
     pub fn with_name(name: String) -> Self {
         Self { name, depth: None }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::utils::shared;
+
+    use super::*;
+
+    #[test]
+    fn patch_instruction() {
+        let error_collector = shared(ErrorCollector::new());
+        let mut parser = Compiler::new(error_collector);
+        parser.emit_instruction_at_line(&Instruction::Add, 0);
+        let emit_addr = parser.emit_instruction_at_line(&Instruction::Constant(1), 0);
+        parser.emit_instruction_at_line(&Instruction::Subtract, 0);
+        parser.emit_instruction_at_line(&Instruction::Return, 0);
+        parser.patch_instruction(&Instruction::Constant(2), emit_addr);
+
+        let chunk = parser.chunk();
+        let mut offset = 0;
+        let expected = &[
+            Instruction::Add,
+            Instruction::Constant(2),
+            Instruction::Subtract,
+            Instruction::Return,
+        ];
+        let mut exp_idx = 0;
+        while let Ok(instr) = chunk.fetch(&mut offset) {
+            assert_eq!(instr, expected[exp_idx]);
+            exp_idx += 1;
+        }
     }
 }

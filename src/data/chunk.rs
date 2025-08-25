@@ -1,6 +1,6 @@
 use crate::{FetchResult, Instruction, Value};
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct Chunk {
     code: Vec<u8>,
     constants: Vec<Value>,

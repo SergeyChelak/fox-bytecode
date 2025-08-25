@@ -21,9 +21,10 @@ pub fn compile(code: Rc<Vec<char>>) -> Result<Chunk, Vec<ErrorInfo>> {
     let scanner = Scanner::new(code);
     let compiler = Compiler::new(error_collector.clone());
     let parser = Parser::with(Box::new(scanner), error_collector.clone(), compiler);
-    let chunk = parser.compile();
+    let compiler = parser.compile();
     if error_collector.borrow().has_errors() {
         return Err(error_collector.borrow().errors().clone());
     }
+    let chunk = compiler.chunk().clone();
     Ok(chunk)
 }

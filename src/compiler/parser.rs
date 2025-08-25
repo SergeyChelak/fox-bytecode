@@ -5,8 +5,8 @@ use crate::{
         scanner::TokenSource,
         token::{Token, TokenType},
     },
-    data::{Chunk, Instruction, Value},
-    utils::{Shared, jump_to_bytes},
+    data::{Instruction, Value},
+    utils::Shared,
 };
 
 pub struct Parser {
@@ -14,7 +14,6 @@ pub struct Parser {
     previous: Token,
     scanner: Box<dyn TokenSource>,
     error_collector: Shared<ErrorCollector>,
-    chunk: Chunk,
     compiler: Compiler,
     loop_stack: Vec<LoopData>,
 }
@@ -30,19 +29,18 @@ impl Parser {
             previous: Token::undefined(),
             scanner,
             error_collector,
-            chunk: Chunk::new(),
             compiler,
             loop_stack: Default::default(),
         }
     }
 
-    pub fn compile(mut self) -> Chunk {
+    pub fn compile(mut self) -> Compiler {
         self.advance();
         while !self.is_match(TokenType::Eof) {
             self.declaration();
         }
         self.end_compiler();
-        self.chunk
+        self.compiler
     }
 
     fn declaration(&mut self) {
@@ -162,12 +160,8 @@ impl Parser {
         self.consume(TokenType::RightBrace, "Expect '}' after block");
     }
 
-    // TODO: move whole function to compiler struct
     fn end_scope(&mut self) {
-        let pops = self.compiler.end_scope();
-        for _ in 0..pops {
-            self.emit_instruction(&Instruction::Pop);
-        }
+        self.compiler.end_scope(self.get_line());
     }
 
     fn for_statement(&mut self) {
@@ -634,38 +628,26 @@ impl Parser {
     }
 }
 
-// TODO: move to compiler
+// Compiler calls wrapped
 impl Parser {
-    fn make_constant(&mut self, value: Value) -> u8 {
-        let idx = self.chunk.add_constant(value);
-        if idx > u8::MAX as usize {
-            self.error("Too many constants in one chunk");
-            // don't think it's a good decision
-            // but this index seems doesn't reachable
-            return 0;
-        }
+    fn get_line(&self) -> usize {
+        self.previous.position.line
+    }
 
-        idx as u8
+    fn make_constant(&mut self, value: Value) -> u8 {
+        self.compiler.make_constant(value)
     }
 
     fn emit_constant(&mut self, value: Value) {
-        let idx = self.make_constant(value);
-        self.emit_instruction(&Instruction::Constant(idx));
+        self.compiler.emit_constant(value, self.get_line());
     }
 
     fn emit_loop(&mut self, loop_start: usize) {
-        let instr = Instruction::Loop(0x0, 0x0);
-        let size = instr.size();
-        let offset = self.chunk_position() - loop_start + size;
-        if offset > u16::MAX as usize {
-            self.error("Jump size is too large");
-        }
-        let (f, s) = jump_to_bytes(offset);
-        self.emit_instruction(&Instruction::Loop(f, s));
+        self.compiler.emit_loop(loop_start, self.get_line());
     }
 
     fn emit_return(&mut self) {
-        self.emit_instruction(&Instruction::Return);
+        self.compiler.emit_return(self.get_line());
     }
 
     fn emit_instructions(&mut self, instruction: &[Instruction]) {
@@ -675,56 +657,16 @@ impl Parser {
     }
 
     fn emit_instruction(&mut self, instruction: &Instruction) -> usize {
-        let line = self.previous.position.line;
-        self.emit_instruction_at_line(instruction, line)
-    }
-
-    fn emit_instruction_at_line(&mut self, instruction: &Instruction, line: usize) -> usize {
-        let start = self.chunk_position();
-        let bytes: Vec<u8> = instruction.as_vec();
-        for byte in bytes.into_iter() {
-            self.chunk.write_u8(byte, line);
-        }
-        start
-    }
-
-    fn patch_instruction(&mut self, instruction: &Instruction, offset: usize) {
-        let bytes: Vec<u8> = instruction.as_vec();
-        for (idx, byte) in bytes.into_iter().enumerate() {
-            self.chunk.patch_u8(byte, offset + idx);
-        }
+        self.compiler
+            .emit_instruction_at_line(instruction, self.get_line())
     }
 
     fn patch_jump(&mut self, offset: usize) {
-        let (fetch_result, size) = {
-            let mut idx = offset;
-            let res = self.chunk.fetch(&mut idx);
-            let size = idx - offset;
-            (res, size)
-        };
-
-        let jump = self.chunk_position() - offset - size;
-        if jump > u16::MAX as usize {
-            self.error("Too much code to jump over");
-        }
-        let (first, second) = jump_to_bytes(jump);
-        let instr = match fetch_result {
-            Ok(Instruction::JumpIfFalse(_, _)) => Instruction::JumpIfFalse(first, second),
-            Ok(Instruction::Jump(_, _)) => Instruction::Jump(first, second),
-            Err(err) => {
-                self.error(&format!("Bug: {err}"));
-                return;
-            }
-            _ => {
-                self.error("Bug: Attempt to patch non-jump instruction in 'path_jump' function");
-                return;
-            }
-        };
-        self.patch_instruction(&instr, offset);
+        self.compiler.patch_jump(offset);
     }
 
     fn chunk_position(&self) -> usize {
-        self.chunk.size()
+        self.compiler.chunk_position()
     }
 }
 
@@ -811,33 +753,8 @@ impl LoopData {
 
 #[cfg(test)]
 mod test_parser {
-    use crate::utils::shared;
-
     use super::*;
-
-    #[test]
-    fn patch_instruction() {
-        let (mut parser, _) = make_parser(vec![]);
-        parser.emit_instruction(&Instruction::Add);
-        let emit_addr = parser.emit_instruction(&Instruction::Constant(1));
-        parser.emit_instruction(&Instruction::Subtract);
-        parser.emit_instruction(&Instruction::Return);
-        parser.patch_instruction(&Instruction::Constant(2), emit_addr);
-
-        let chunk = parser.chunk;
-        let mut offset = 0;
-        let expected = &[
-            Instruction::Add,
-            Instruction::Constant(2),
-            Instruction::Subtract,
-            Instruction::Return,
-        ];
-        let mut exp_idx = 0;
-        while let Ok(instr) = chunk.fetch(&mut offset) {
-            assert_eq!(instr, expected[exp_idx]);
-            exp_idx += 1;
-        }
-    }
+    use crate::utils::shared;
 
     #[test]
     fn emit_unary_chunk() {
@@ -956,19 +873,23 @@ mod test_parser {
     }
 
     fn state_expectation_test(input: Vec<Token>, expectation: Expectation) {
-        let (parser, ec) = make_parser(input);
-        let chunk = parser.compile();
+        let mock = ScannerMock::new(input);
+        let ec = shared(ErrorCollector::new());
+        let compiler = Compiler::new(ec.clone());
+        let parser = Parser::with(Box::new(mock), ec.clone(), compiler);
+        let compiler = parser.compile();
 
         if ec.borrow().has_errors() {
             panic!("{:?}", ec.borrow().errors());
         }
         for (i, x) in expectation.constants.iter().enumerate() {
-            assert_eq!(chunk.read_const(i as u8), Some(x.clone()));
+            assert_eq!(compiler.chunk().read_const(i as u8), Some(x.clone()));
         }
 
         let mut offset = 0;
         for instr_exp in expectation.instructions {
-            let instr = chunk
+            let instr = compiler
+                .chunk()
                 .fetch(&mut offset)
                 .expect("Failed to fetch instruction");
             assert_eq!(instr, instr_exp);
@@ -1029,13 +950,6 @@ mod test_parser {
         fn semicolon() -> Self {
             Self::make(TokenType::Semicolon, ";")
         }
-    }
-
-    fn make_parser(tokens: Vec<Token>) -> (Parser, Shared<ErrorCollector>) {
-        let mock = ScannerMock::new(tokens);
-        let ec = shared(ErrorCollector::new());
-        let compiler = Compiler::new(ec.clone());
-        (Parser::with(Box::new(mock), ec.clone(), compiler), ec)
     }
 }
 
