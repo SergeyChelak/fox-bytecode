@@ -1,4 +1,4 @@
-use crate::{ErrorInfo, MachineError, MachineIO, value::Value};
+use crate::{ErrorInfo, MachineError, MachineIO, data::Value};
 
 #[derive(Default)]
 pub struct Probe {

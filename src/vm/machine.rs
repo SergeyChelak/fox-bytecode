@@ -2,9 +2,9 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use crate::{
     MachineError, MachineResult,
-    chunk::Chunk,
+    data::Chunk,
+    data::{OperationError, Value, ValueOperation},
     utils::bytes_to_jump,
-    value::{OperationError, Value, ValueOperation},
     vm::{FetchError, Instruction, MachineIO},
 };
 

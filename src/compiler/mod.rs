@@ -8,7 +8,7 @@ use std::rc::Rc;
 use scanner::*;
 pub use token::*;
 
-use crate::{chunk::Chunk, compiler::parser::Parser, error_info::ErrorInfo};
+use crate::{compiler::parser::Parser, data::Chunk, error_info::ErrorInfo};
 
 pub fn compile(code: Rc<Vec<char>>) -> Result<Chunk, Vec<ErrorInfo>> {
     let scanner = Scanner::new(code);

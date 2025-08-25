@@ -1,10 +1,9 @@
 use std::{cell::RefCell, rc::Rc};
 
-mod chunk;
+mod data;
+pub use data::*;
 mod compiler;
 use compiler::*;
-mod value;
-pub use value::Value;
 mod error_info;
 pub use error_info::*;
 mod utils;

@@ -1,13 +1,13 @@
 use crate::{
-    chunk::Chunk,
     compiler::{
         scanner::TokenSource,
         scope::{Local, Scope},
         token::{Token, TokenType},
     },
+    data::Chunk,
+    data::Value,
     error_info::ErrorInfo,
     utils::jump_to_bytes,
-    value::Value,
     vm::Instruction,
 };
 

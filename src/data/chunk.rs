@@ -1,5 +1,5 @@
 use crate::{
-    value::Value,
+    Value,
     vm::{FetchResult, Instruction},
 };
 
