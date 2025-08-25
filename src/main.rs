@@ -36,7 +36,7 @@ impl SystemIO {
 }
 
 impl MachineIO for SystemIO {
-    fn push_output(&mut self, value: DataType) {
+    fn push_output(&mut self, value: Value) {
         println!("{value}");
     }
 

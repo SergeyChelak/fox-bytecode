@@ -8,7 +8,7 @@ pub use probe::*;
 mod machine;
 pub use machine::Machine;
 
-use crate::{data::DataType, error_info::ErrorInfo};
+use crate::{error_info::ErrorInfo, value::Value};
 
 #[derive(Debug, Clone)]
 pub struct MachineError {
@@ -36,7 +36,7 @@ impl Display for MachineError {
 pub type MachineResult<T> = Result<T, MachineError>;
 
 pub trait MachineIO {
-    fn push_output(&mut self, value: DataType);
+    fn push_output(&mut self, value: Value);
 
     fn set_vm_error(&mut self, error: MachineError);
 

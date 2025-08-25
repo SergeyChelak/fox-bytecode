@@ -3,8 +3,8 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc};
 use crate::{
     MachineError, MachineResult,
     chunk::Chunk,
-    data::{DataOperation, DataType, OperationError},
     utils::bytes_to_jump,
+    value::{OperationError, Value, ValueOperation},
     vm::{FetchError, Instruction, MachineIO},
 };
 
@@ -13,8 +13,8 @@ const STACK_MAX_SIZE: usize = 256;
 pub struct Machine {
     chunk: Chunk,
     ip: usize,
-    stack: Vec<DataType>,
-    globals: HashMap<Rc<String>, DataType>,
+    stack: Vec<Value>,
+    globals: HashMap<Rc<String>, Value>,
     io: Rc<RefCell<dyn MachineIO>>,
 }
 
@@ -23,7 +23,7 @@ impl Machine {
         Self {
             chunk,
             ip: 0,
-            stack: Vec::<DataType>::with_capacity(STACK_MAX_SIZE),
+            stack: Vec::<Value>::with_capacity(STACK_MAX_SIZE),
             globals: HashMap::new(),
             io,
         }
@@ -52,26 +52,26 @@ impl Machine {
                     let value = self.read_const(index)?;
                     self.stack_push(value)?;
                 }
-                Instruction::Equal => self.do_binary(DataType::equals)?,
-                Instruction::Greater => self.do_binary(DataType::greater)?,
-                Instruction::Less => self.do_binary(DataType::less)?,
-                Instruction::Nil => self.stack_push(DataType::Nil)?,
-                Instruction::True => self.stack_push(DataType::Bool(true))?,
-                Instruction::False => self.stack_push(DataType::Bool(false))?,
-                Instruction::Add => self.do_binary(DataType::add)?,
-                Instruction::Subtract => self.do_binary(DataType::subtract)?,
-                Instruction::Multiply => self.do_binary(DataType::multiply)?,
-                Instruction::Divide => self.do_binary(DataType::divide)?,
+                Instruction::Equal => self.do_binary(Value::equals)?,
+                Instruction::Greater => self.do_binary(Value::greater)?,
+                Instruction::Less => self.do_binary(Value::less)?,
+                Instruction::Nil => self.stack_push(Value::Nil)?,
+                Instruction::True => self.stack_push(Value::Bool(true))?,
+                Instruction::False => self.stack_push(Value::Bool(false))?,
+                Instruction::Add => self.do_binary(Value::add)?,
+                Instruction::Subtract => self.do_binary(Value::subtract)?,
+                Instruction::Multiply => self.do_binary(Value::multiply)?,
+                Instruction::Divide => self.do_binary(Value::divide)?,
                 Instruction::Negate => {
                     let value = self.stack_pop()?;
                     let Some(value) = value.as_number() else {
                         return Err(self.runtime_error("Operand must be a number"));
                     };
-                    self.stack_push(DataType::number(-value))?;
+                    self.stack_push(Value::number(-value))?;
                 }
                 Instruction::Not => {
                     let value = self.stack_pop()?;
-                    self.stack_push(DataType::Bool(!value.as_bool()))?;
+                    self.stack_push(Value::Bool(!value.as_bool()))?;
                 }
                 Instruction::Print => {
                     let value = self.stack_pop()?;
@@ -165,7 +165,7 @@ impl Machine {
         Ok(name)
     }
 
-    fn do_binary(&mut self, operation: DataOperation) -> MachineResult<()> {
+    fn do_binary(&mut self, operation: ValueOperation) -> MachineResult<()> {
         let b = self.stack_pop()?;
         let a = self.stack_pop()?;
         match operation(&a, &b) {
@@ -180,7 +180,7 @@ impl Machine {
         }
     }
 
-    fn read_const(&self, index: u8) -> MachineResult<DataType> {
+    fn read_const(&self, index: u8) -> MachineResult<Value> {
         let Some(value) = self.chunk.read_const(index) else {
             return Err(self.runtime_error("Invalid constant index"));
         };
@@ -191,7 +191,7 @@ impl Machine {
         self.stack.clear();
     }
 
-    fn stack_push(&mut self, value: DataType) -> MachineResult<()> {
+    fn stack_push(&mut self, value: Value) -> MachineResult<()> {
         if self.stack.len() >= STACK_MAX_SIZE {
             return Err(self.runtime_error("Stack overflow"));
         }
@@ -199,11 +199,11 @@ impl Machine {
         Ok(())
     }
 
-    fn stack_peek(&mut self) -> Option<DataType> {
+    fn stack_peek(&mut self) -> Option<Value> {
         self.stack.last().cloned()
     }
 
-    fn stack_pop(&mut self) -> MachineResult<DataType> {
+    fn stack_pop(&mut self) -> MachineResult<Value> {
         let Some(value) = self.stack.pop() else {
             return Err(self.runtime_error("Pop on empty stack"));
         };
@@ -229,12 +229,7 @@ mod test {
     fn operation_negate() -> MachineResult<()> {
         let mut chunk = Chunk::new();
         chunk.write_u8(OPCODE_NEGATE, 1);
-        machine_test(
-            chunk,
-            &[DataType::number(10.0)],
-            &[DataType::number(-10.0)],
-            &[],
-        )
+        machine_test(chunk, &[Value::number(10.0)], &[Value::number(-10.0)], &[])
     }
 
     #[test]
@@ -246,50 +241,44 @@ mod test {
         };
         machine_test(
             make_chunk(),
-            &[DataType::number(2.0), DataType::number(2.0)],
-            &[DataType::Bool(true)],
+            &[Value::number(2.0), Value::number(2.0)],
+            &[Value::Bool(true)],
             &[],
         )?;
         machine_test(
             make_chunk(),
-            &[DataType::number(3.0), DataType::number(2.0)],
-            &[DataType::Bool(false)],
+            &[Value::number(3.0), Value::number(2.0)],
+            &[Value::Bool(false)],
             &[],
         )?;
         machine_test(
             make_chunk(),
-            &[DataType::Bool(false), DataType::Bool(false)],
-            &[DataType::Bool(true)],
+            &[Value::Bool(false), Value::Bool(false)],
+            &[Value::Bool(true)],
             &[],
         )?;
         machine_test(
             make_chunk(),
-            &[DataType::Nil, DataType::Nil],
-            &[DataType::Bool(true)],
+            &[Value::Nil, Value::Nil],
+            &[Value::Bool(true)],
             &[],
         )?;
         machine_test(
             make_chunk(),
-            &[DataType::Bool(false), DataType::Nil],
-            &[DataType::Bool(false)],
+            &[Value::Bool(false), Value::Nil],
+            &[Value::Bool(false)],
             &[],
         )?;
         machine_test(
             make_chunk(),
-            &[
-                DataType::text_from_str("abc"),
-                DataType::text_from_str("abc"),
-            ],
-            &[DataType::Bool(true)],
+            &[Value::text_from_str("abc"), Value::text_from_str("abc")],
+            &[Value::Bool(true)],
             &[],
         )?;
         machine_test(
             make_chunk(),
-            &[
-                DataType::text_from_str("abc"),
-                DataType::text_from_str("abcd"),
-            ],
-            &[DataType::Bool(false)],
+            &[Value::text_from_str("abc"), Value::text_from_str("abcd")],
+            &[Value::Bool(false)],
             &[],
         )
     }
@@ -303,14 +292,14 @@ mod test {
         };
         machine_test(
             make_chunk(),
-            &[DataType::number(3.0), DataType::number(2.0)],
-            &[DataType::Bool(true)],
+            &[Value::number(3.0), Value::number(2.0)],
+            &[Value::Bool(true)],
             &[],
         )?;
         machine_test(
             make_chunk(),
-            &[DataType::number(1.0), DataType::number(2.0)],
-            &[DataType::Bool(false)],
+            &[Value::number(1.0), Value::number(2.0)],
+            &[Value::Bool(false)],
             &[],
         )
     }
@@ -324,20 +313,20 @@ mod test {
         };
         machine_test(
             make_chunk(),
-            &[DataType::number(3.0), DataType::number(2.0)],
-            &[DataType::Bool(false)],
+            &[Value::number(3.0), Value::number(2.0)],
+            &[Value::Bool(false)],
             &[],
         )?;
         machine_test(
             make_chunk(),
-            &[DataType::number(1.0), DataType::number(2.0)],
-            &[DataType::Bool(true)],
+            &[Value::number(1.0), Value::number(2.0)],
+            &[Value::Bool(true)],
             &[],
         )?;
 
         let res = machine_test(
             make_chunk(),
-            &[DataType::number(1.0), DataType::Bool(true)],
+            &[Value::number(1.0), Value::Bool(true)],
             &[],
             &[],
         );
@@ -349,28 +338,28 @@ mod test {
     fn operation_nil() -> MachineResult<()> {
         let mut chunk = Chunk::new();
         chunk.write_u8(OPCODE_NIL, 1);
-        machine_test(chunk, &[], &[DataType::Nil], &[])
+        machine_test(chunk, &[], &[Value::Nil], &[])
     }
 
     #[test]
     fn operation_true() -> MachineResult<()> {
         let mut chunk = Chunk::new();
         chunk.write_u8(OPCODE_TRUE, 1);
-        machine_test(chunk, &[], &[DataType::Bool(true)], &[])
+        machine_test(chunk, &[], &[Value::Bool(true)], &[])
     }
 
     #[test]
     fn operation_false() -> MachineResult<()> {
         let mut chunk = Chunk::new();
         chunk.write_u8(OPCODE_FALSE, 1);
-        machine_test(chunk, &[], &[DataType::Bool(false)], &[])
+        machine_test(chunk, &[], &[Value::Bool(false)], &[])
     }
 
     #[test]
     fn operation_pop() -> MachineResult<()> {
         let mut chunk = Chunk::new();
         chunk.write_u8(OPCODE_POP, 1);
-        machine_test(chunk, &[DataType::Bool(true)], &[], &[])
+        machine_test(chunk, &[Value::Bool(true)], &[], &[])
     }
 
     #[test]
@@ -382,17 +371,17 @@ mod test {
         };
         machine_test(
             make_chunk(),
-            &[DataType::number(2.0), DataType::number(3.0)],
-            &[DataType::number(5.0)],
+            &[Value::number(2.0), Value::number(3.0)],
+            &[Value::number(5.0)],
             &[],
         )?;
         machine_test(
             make_chunk(),
             &[
-                DataType::text_from_str("first"),
-                DataType::text_from_str("_second"),
+                Value::text_from_str("first"),
+                Value::text_from_str("_second"),
             ],
-            &[DataType::text_from_str("first_second")],
+            &[Value::text_from_str("first_second")],
             &[],
         )
     }
@@ -403,8 +392,8 @@ mod test {
         chunk.write_u8(OPCODE_SUBTRACT, 1);
         machine_test(
             chunk,
-            &[DataType::number(2.0), DataType::number(3.0)],
-            &[DataType::number(-1.0)],
+            &[Value::number(2.0), Value::number(3.0)],
+            &[Value::number(-1.0)],
             &[],
         )
     }
@@ -415,8 +404,8 @@ mod test {
         chunk.write_u8(OPCODE_MULTIPLY, 1);
         machine_test(
             chunk,
-            &[DataType::number(2.0), DataType::number(3.0)],
-            &[DataType::number(6.0)],
+            &[Value::number(2.0), Value::number(3.0)],
+            &[Value::number(6.0)],
             &[],
         )
     }
@@ -427,8 +416,8 @@ mod test {
         chunk.write_u8(OPCODE_DIVIDE, 1);
         machine_test(
             chunk,
-            &[DataType::number(6.0), DataType::number(3.0)],
-            &[DataType::number(2.0)],
+            &[Value::number(6.0), Value::number(3.0)],
+            &[Value::number(2.0)],
             &[],
         )
     }
@@ -439,8 +428,8 @@ mod test {
         chunk.write_u8(OPCODE_DUPLICATE, 1);
         machine_test(
             chunk,
-            &[DataType::number(6.0)],
-            &[DataType::number(6.0), DataType::number(6.0)],
+            &[Value::number(6.0)],
+            &[Value::number(6.0), Value::number(6.0)],
             &[],
         )
     }
@@ -451,7 +440,7 @@ mod test {
         chunk.write_u8(OPCODE_PRINT, 1);
         machine_test(
             chunk,
-            &[DataType::text_from_str("abc")],
+            &[Value::text_from_str("abc")],
             &[],
             &["abc".to_string()],
         )
@@ -461,8 +450,8 @@ mod test {
     fn operation_constant() -> MachineResult<()> {
         let mut chunk = Chunk::new();
         chunk.write_u8(OPCODE_CONSTANT, 1);
-        chunk.add_constant(DataType::number(2.0));
-        let idx = chunk.add_constant(DataType::number(10.0));
+        chunk.add_constant(Value::number(2.0));
+        let idx = chunk.add_constant(Value::number(10.0));
         chunk.write_u8(idx as u8, 1);
         let mut machine = Machine::with(chunk, Rc::new(RefCell::new(DummyIO)));
         machine.run()?;
@@ -473,7 +462,7 @@ mod test {
     struct DummyIO;
 
     impl MachineIO for DummyIO {
-        fn push_output(&mut self, _value: DataType) {
+        fn push_output(&mut self, _value: Value) {
             // no op
         }
 
@@ -488,8 +477,8 @@ mod test {
 
     fn machine_test(
         chunk: Chunk,
-        stack_in: &[DataType],
-        stack_out: &[DataType],
+        stack_in: &[Value],
+        stack_out: &[Value],
         buffer_out: &[String],
     ) -> MachineResult<()> {
         let probe_ref = Rc::new(RefCell::new(Probe::new()));

@@ -1,4 +1,4 @@
-use crate::{ErrorInfo, MachineError, MachineIO, data::DataType};
+use crate::{ErrorInfo, MachineError, MachineIO, value::Value};
 
 #[derive(Default)]
 pub struct Probe {
@@ -35,7 +35,7 @@ impl Probe {
 }
 
 impl MachineIO for Probe {
-    fn push_output(&mut self, value: DataType) {
+    fn push_output(&mut self, value: Value) {
         self.output_buffer.push(value.to_string());
     }
 
