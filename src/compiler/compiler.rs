@@ -1,4 +1,4 @@
-use crate::{Chunk, Func, FuncType, compiler::Token};
+use crate::{Chunk, Func, FuncType, Instruction, Value, compiler::Token, utils::jump_to_bytes};
 
 const MAX_SCOPE_SIZE: usize = 256;
 
@@ -25,7 +25,7 @@ impl Default for Compiler {
         }
     }
 }
-
+/*
 impl Compiler {
     pub fn chunk(&self) -> &Chunk {
         self.func.chunk()
@@ -44,6 +44,85 @@ impl Compiler {
     }
 }
 
+
+// TODO: move to compiler
+impl Compiler {
+    fn make_constant(&mut self, value: Value) -> u8 {
+        let idx = self.chunk_mut().add_constant(value);
+        if idx > u8::MAX as usize {
+            self.error("Too many constants in one chunk");
+            // don't think it's a good decision
+            // but this index seems doesn't reachable
+            return 0;
+        }
+        idx as u8
+    }
+
+    fn emit_constant(&mut self, value: Value, line: usize) {
+        let idx = self.make_constant(value);
+        self.emit_instruction_at_line(&Instruction::Constant(idx), line);
+    }
+
+    fn emit_loop(&mut self, loop_start: usize, line: usize) {
+        let instr = Instruction::Loop(0x0, 0x0);
+        let size = instr.size();
+        let offset = self.chunk_position() - loop_start + size;
+        if offset > u16::MAX as usize {
+            self.error("Jump size is too large");
+        }
+        let (f, s) = jump_to_bytes(offset);
+        self.emit_instruction_at_line(&Instruction::Loop(f, s), line);
+    }
+
+    fn emit_return(&mut self, line: usize) {
+        self.emit_instruction_at_line(&Instruction::Return, line);
+    }
+
+    fn emit_instruction_at_line(&mut self, instruction: &Instruction, line: usize) -> usize {
+        let start = self.chunk_position();
+        let bytes: Vec<u8> = instruction.as_vec();
+        for byte in bytes.into_iter() {
+            self.chunk_mut().write_u8(byte, line);
+        }
+        start
+    }
+
+    fn patch_instruction(&mut self, instruction: &Instruction, offset: usize) {
+        let bytes: Vec<u8> = instruction.as_vec();
+        for (idx, byte) in bytes.into_iter().enumerate() {
+            self.chunk_mut().patch_u8(byte, offset + idx);
+        }
+    }
+
+    fn patch_jump(&mut self, offset: usize) {
+        let (fetch_result, size) = {
+            let mut idx = offset;
+            let res = self.chunk().fetch(&mut idx);
+            let size = idx - offset;
+            (res, size)
+        };
+
+        let jump = self.chunk_position() - offset - size;
+        if jump > u16::MAX as usize {
+            self.error("Too much code to jump over");
+        }
+        let (first, second) = jump_to_bytes(jump);
+        let instr = match fetch_result {
+            Ok(Instruction::JumpIfFalse(_, _)) => Instruction::JumpIfFalse(first, second),
+            Ok(Instruction::Jump(_, _)) => Instruction::Jump(first, second),
+            Err(err) => {
+                self.error(&format!("Bug: {err}"));
+                return;
+            }
+            _ => {
+                self.error("Bug: Attempt to patch non-jump instruction in 'path_jump' function");
+                return;
+            }
+        };
+        self.patch_instruction(&instr, offset);
+    }
+}
+ */
 impl Compiler {
     pub fn begin_scope(&mut self) {
         self.depth += 1;

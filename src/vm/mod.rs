@@ -5,7 +5,7 @@ pub use probe::*;
 mod machine;
 pub use machine::Machine;
 
-use crate::{data::Value, error_info::ErrorInfo};
+use crate::{data::Value, errors::ErrorInfo};
 
 #[derive(Debug, Clone)]
 pub struct MachineError {

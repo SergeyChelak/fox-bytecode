@@ -1,49 +1,45 @@
 use crate::{
+    ErrorCollector,
     compiler::{
         compiler::{Compiler, Local},
         scanner::TokenSource,
         token::{Token, TokenType},
     },
     data::{Chunk, Instruction, Value},
-    error_info::ErrorInfo,
-    utils::jump_to_bytes,
+    errors::ErrorInfo,
+    utils::{Shared, jump_to_bytes},
 };
 
 pub struct Parser {
     current: Token,
     previous: Token,
     scanner: Box<dyn TokenSource>,
-    panic_mode: bool,
+    error_collector: Shared<ErrorCollector>,
     chunk: Chunk,
-    errors: Vec<ErrorInfo>,
     compiler: Compiler,
     loop_stack: Vec<LoopData>,
 }
 
 impl Parser {
-    pub fn with(scanner: Box<dyn TokenSource>) -> Self {
+    pub fn with(scanner: Box<dyn TokenSource>, error_collector: Shared<ErrorCollector>) -> Self {
         Self {
             current: Token::undefined(),
             previous: Token::undefined(),
             scanner,
-            panic_mode: false,
+            error_collector,
             chunk: Chunk::new(),
-            errors: Default::default(),
             compiler: Default::default(),
             loop_stack: Default::default(),
         }
     }
 
-    pub fn compile(mut self) -> Result<Chunk, Vec<ErrorInfo>> {
+    pub fn compile(mut self) -> Chunk {
         self.advance();
         while !self.is_match(TokenType::Eof) {
             self.declaration();
         }
         self.end_compiler();
-        if !self.errors.is_empty() {
-            return Err(self.errors);
-        }
-        Ok(self.chunk)
+        self.chunk
     }
 
     fn declaration(&mut self) {
@@ -52,7 +48,7 @@ impl Parser {
         } else {
             self.statement();
         }
-        if self.panic_mode {
+        if self.is_panic() {
             self.synchronize();
         }
     }
@@ -387,21 +383,35 @@ impl Parser {
     }
 
     fn advance(&mut self) {
-        self.previous = self.current.clone();
-        loop {
+        self.update_previous();
+        let mut looping = true;
+        while looping {
             let token = self.scanner.scan_token();
             let is_err = token.is_err();
-            self.current = token;
+            self.set_current(token);
             if is_err {
                 self.error_at_current("");
-            } else {
-                break;
             }
+            looping = is_err;
         }
     }
 
+    fn set_current(&mut self, token: Token) {
+        self.current = token;
+        self.error_collector
+            .borrow_mut()
+            .update_current_token(self.current.clone());
+    }
+
+    fn update_previous(&mut self) {
+        self.previous = self.current.clone();
+        self.error_collector
+            .borrow_mut()
+            .update_previous_token(self.previous.clone());
+    }
+
     fn synchronize(&mut self) {
-        self.panic_mode = false;
+        self.reset_panic();
 
         while !matches!(self.cur_token_type(), TokenType::Eof) {
             if matches!(self.prev_token_type(), TokenType::Semicolon) {
@@ -420,23 +430,6 @@ impl Parser {
             }
             self.advance();
         }
-    }
-
-    fn error_at_current(&mut self, message: &str) {
-        self.push_error_info(self.current.clone(), message);
-    }
-
-    fn error(&mut self, message: &str) {
-        self.push_error_info(self.previous.clone(), message);
-    }
-
-    fn push_error_info(&mut self, elem: Token, message: &str) {
-        if self.panic_mode {
-            return;
-        }
-        self.panic_mode = true;
-        let info = ErrorInfo::with(elem, message);
-        self.errors.push(info);
     }
 
     fn expression(&mut self) {
@@ -619,6 +612,25 @@ impl Parser {
     }
 }
 
+// Error wrapped calls
+impl Parser {
+    fn error_at_current(&mut self, message: &str) {
+        self.error_collector.borrow_mut().error_at_current(message);
+    }
+
+    fn error(&mut self, message: &str) {
+        self.error_collector.borrow_mut().error(message);
+    }
+
+    pub fn reset_panic(&mut self) {
+        self.error_collector.borrow_mut().reset_panic();
+    }
+
+    pub fn is_panic(&self) -> bool {
+        self.error_collector.borrow().is_panic()
+    }
+}
+
 // TODO: move to compiler
 impl Parser {
     fn make_constant(&mut self, value: Value) -> u8 {
@@ -796,12 +808,15 @@ impl LoopData {
 
 #[cfg(test)]
 mod test_parser {
+    use crate::utils::shared;
+
     use super::*;
 
     #[test]
     fn patch_instruction() {
         let mock = ScannerMock::new(vec![]);
-        let mut parser = Parser::with(Box::new(mock));
+        let ec = shared(ErrorCollector::new());
+        let mut parser = Parser::with(Box::new(mock), ec);
         parser.emit_instruction(&Instruction::Add);
         let emit_addr = parser.emit_instruction(&Instruction::Constant(1));
         parser.emit_instruction(&Instruction::Subtract);
@@ -941,12 +956,14 @@ mod test_parser {
 
     fn state_expectation_test(input: Vec<Token>, expectation: Expectation) {
         let mock = ScannerMock::new(input);
-        let parser = Parser::with(Box::new(mock));
+        let ec = shared(ErrorCollector::new());
+        let parser = Parser::with(Box::new(mock), ec.clone());
 
-        let chunk = match parser.compile() {
-            Ok(value) => value,
-            Err(err) => panic!("{:?}", err),
-        };
+        let chunk = parser.compile();
+
+        if ec.borrow().has_errors() {
+            panic!("{:?}", ec.borrow().errors());
+        }
         for (i, x) in expectation.constants.iter().enumerate() {
             assert_eq!(chunk.read_const(i as u8), Some(x.clone()));
         }

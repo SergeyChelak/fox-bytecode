@@ -1,6 +1,6 @@
 use std::rc::Rc;
 
-use crate::error_info::CodePosition;
+use crate::errors::CodePosition;
 
 use super::{Token, TokenType};
 
