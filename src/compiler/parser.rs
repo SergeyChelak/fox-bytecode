@@ -434,7 +434,7 @@ impl Parser {
     }
 
     fn consume<T: AsRef<str>>(&mut self, t_type: TokenType, message: T) {
-        if self.current.t_type == t_type {
+        if self.cur_token_type() == t_type {
             self.advance();
             return;
         };
@@ -752,9 +752,9 @@ impl LoopData {
 }
 
 #[cfg(test)]
-mod test_parser {
+mod tests {
     use super::*;
-    use crate::utils::shared;
+    use crate::{compiler::scanner::tests::ScannerMock, utils::shared};
 
     #[test]
     fn emit_unary_chunk() {
@@ -899,57 +899,6 @@ mod test_parser {
     struct Expectation {
         constants: Vec<Value>,
         instructions: Vec<Instruction>,
-    }
-
-    struct ScannerMock {
-        idx: usize,
-        tokens: Vec<Token>,
-    }
-
-    impl ScannerMock {
-        fn new(tokens: Vec<Token>) -> Self {
-            Self { idx: 0, tokens }
-        }
-    }
-
-    impl TokenSource for ScannerMock {
-        fn scan_token(&mut self) -> Token {
-            let token = self.tokens.get(self.idx);
-            if token.is_some() {
-                self.idx += 1;
-            }
-            token.cloned().unwrap_or(Token::eof())
-        }
-    }
-
-    impl Token {
-        fn eof() -> Self {
-            Self::with_type(TokenType::Eof)
-        }
-
-        fn number(value: &str) -> Self {
-            Self::make(TokenType::Number, value)
-        }
-
-        fn minus() -> Self {
-            Self::make(TokenType::Minus, "-")
-        }
-
-        fn plus() -> Self {
-            Self::make(TokenType::Plus, "+")
-        }
-
-        fn multiply() -> Self {
-            Self::make(TokenType::Star, "*")
-        }
-
-        fn divide() -> Self {
-            Self::make(TokenType::Slash, "/")
-        }
-
-        fn semicolon() -> Self {
-            Self::make(TokenType::Semicolon, ";")
-        }
     }
 }
 

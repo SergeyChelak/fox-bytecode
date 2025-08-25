@@ -410,3 +410,29 @@ mod test {
         }
     }
 }
+
+#[cfg(test)]
+pub mod tests {
+    use super::*;
+
+    pub struct ScannerMock {
+        idx: usize,
+        tokens: Vec<Token>,
+    }
+
+    impl ScannerMock {
+        pub fn new(tokens: Vec<Token>) -> Self {
+            Self { idx: 0, tokens }
+        }
+    }
+
+    impl TokenSource for ScannerMock {
+        fn scan_token(&mut self) -> Token {
+            let token = self.tokens.get(self.idx);
+            if token.is_some() {
+                self.idx += 1;
+            }
+            token.cloned().unwrap_or(Token::eof())
+        }
+    }
+}

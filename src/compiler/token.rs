@@ -88,3 +88,38 @@ impl Token {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    impl Token {
+        pub fn eof() -> Self {
+            Self::with_type(TokenType::Eof)
+        }
+
+        pub fn number(value: &str) -> Self {
+            Self::make(TokenType::Number, value)
+        }
+
+        pub fn minus() -> Self {
+            Self::make(TokenType::Minus, "-")
+        }
+
+        pub fn plus() -> Self {
+            Self::make(TokenType::Plus, "+")
+        }
+
+        pub fn multiply() -> Self {
+            Self::make(TokenType::Star, "*")
+        }
+
+        pub fn divide() -> Self {
+            Self::make(TokenType::Slash, "/")
+        }
+
+        pub fn semicolon() -> Self {
+            Self::make(TokenType::Semicolon, ";")
+        }
+    }
+}

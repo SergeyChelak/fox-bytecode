@@ -1,4 +1,5 @@
 mod compiler;
+mod frontend;
 mod parser;
 mod scanner;
 mod token;
