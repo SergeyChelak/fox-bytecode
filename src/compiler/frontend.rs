@@ -91,8 +91,10 @@ impl Frontend {
     fn end_compiler(&mut self) {
         self.emit_return();
     }
+}
 
-    // expressions
+/// expressions
+impl Frontend {
     fn expression(&mut self) {
         todo!()
     }

@@ -3,6 +3,7 @@ use crate::{
     compiler::{
         Local, LoopData,
         compiler::Compiler,
+        rule::Precedence,
         scanner::TokenSource,
         token::{Token, TokenType},
     },
@@ -671,72 +672,7 @@ impl Parser {
     }
 }
 
-#[repr(u8)]
-#[derive(Debug, Clone, Copy, PartialEq)]
-enum Precedence {
-    None,
-    Assignment, // =
-    Or,         // or
-    And,        // and
-    Equality,   // == !=
-    Comparison, // < > <= >=
-    Term,       // + -
-    Factor,     // * /
-    Unary,      // ! -
-    Call,       // . ()
-    Primary,
-}
-
-impl Precedence {
-    fn increased(&self) -> Self {
-        use Precedence::*;
-        match self {
-            None => Assignment,
-            Assignment => Or,
-            Or => And,
-            And => Equality,
-            Equality => Comparison,
-            Comparison => Term,
-            Term => Factor,
-            Factor => Unary,
-            Unary => Call,
-            Call => Primary,
-            Primary => Primary, //unreachable!("undefined behavior by the book"),
-        }
-    }
-
-    fn le(&self, other: &Self) -> bool {
-        *self as u8 <= *other as u8
-    }
-}
-
-type ParseFn = fn(&mut Parser, bool);
-
-struct ParseRule {
-    prefix: Option<ParseFn>,
-    infix: Option<ParseFn>,
-    precedence: Precedence,
-}
-
-impl ParseRule {
-    fn new(prefix: Option<ParseFn>, infix: Option<ParseFn>, precedence: Precedence) -> Self {
-        Self {
-            prefix,
-            infix,
-            precedence,
-        }
-    }
-}
-
-impl Default for ParseRule {
-    fn default() -> Self {
-        Self {
-            precedence: Precedence::None,
-            prefix: Default::default(),
-            infix: Default::default(),
-        }
-    }
-}
+type ParseRule = super::rule::ParseRule<Parser>;
 
 #[cfg(test)]
 mod tests {
@@ -886,26 +822,5 @@ mod tests {
     struct Expectation {
         constants: Vec<Value>,
         instructions: Vec<Instruction>,
-    }
-}
-
-#[cfg(test)]
-mod test_precedence {
-    use super::*;
-
-    #[test]
-    fn increase_less_equal() {
-        use Precedence::*;
-        let precedence = [
-            None, Assignment, Or, And, Equality, Comparison, Term, Factor, Unary, Call, Primary,
-        ];
-
-        for (i, item) in precedence.iter().enumerate() {
-            let next = item.increased();
-            assert!(item.le(item));
-            assert!(item.le(&next));
-            let next_val = precedence.get(i + 1).unwrap_or(&Precedence::Primary);
-            assert_eq!(next, *next_val);
-        }
     }
 }
