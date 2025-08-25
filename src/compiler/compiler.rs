@@ -1,4 +1,4 @@
-use crate::compiler::Token;
+use crate::{Chunk, Func, FuncType, compiler::Token};
 
 const MAX_SCOPE_SIZE: usize = 256;
 
@@ -7,10 +7,41 @@ pub struct LocalVariableInfo {
     pub depth: Option<usize>,
 }
 
-#[derive(Default)]
+// #[derive(Default)]
 pub struct Compiler {
+    func: Box<Func>,
+    func_type: FuncType,
     locals: Vec<Local>,
     depth: usize,
+}
+
+impl Default for Compiler {
+    fn default() -> Self {
+        Self {
+            func: Default::default(),
+            func_type: FuncType::Script,
+            locals: Default::default(),
+            depth: Default::default(),
+        }
+    }
+}
+
+impl Compiler {
+    pub fn chunk(&self) -> &Chunk {
+        self.func.chunk()
+    }
+
+    pub fn chunk_mut(&mut self) -> &mut Chunk {
+        self.func.chunk_mut()
+    }
+
+    pub fn function(self) -> Func {
+        *self.func
+    }
+
+    pub fn chunk_position(&self) -> usize {
+        self.func.chunk().size()
+    }
 }
 
 impl Compiler {
@@ -28,11 +59,11 @@ impl Compiler {
         pop_count
     }
 
-    pub fn is_global(&self) -> bool {
+    pub fn is_global_scope(&self) -> bool {
         self.depth == 0
     }
 
-    pub fn is_local(&self) -> bool {
+    pub fn is_local_scope(&self) -> bool {
         self.depth > 0
     }
 

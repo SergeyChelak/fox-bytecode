@@ -16,7 +16,7 @@ pub struct Parser {
     panic_mode: bool,
     chunk: Chunk,
     errors: Vec<ErrorInfo>,
-    scope: Compiler,
+    compiler: Compiler,
     loop_stack: Vec<LoopData>,
 }
 
@@ -29,7 +29,7 @@ impl Parser {
             panic_mode: false,
             chunk: Chunk::new(),
             errors: Default::default(),
-            scope: Default::default(),
+            compiler: Default::default(),
             loop_stack: Default::default(),
         }
     }
@@ -41,7 +41,7 @@ impl Parser {
         }
         self.end_compiler();
         if !self.errors.is_empty() {
-            return Err(self.errors.clone());
+            return Err(self.errors);
         }
         Ok(self.chunk)
     }
@@ -76,30 +76,30 @@ impl Parser {
     fn parse_variable(&mut self, message: &str) -> u8 {
         self.consume(TokenType::Identifier, message);
         self.declare_variable();
-        if self.scope.is_local() {
+        if self.compiler.is_local_scope() {
             return 0;
         }
         self.identifier_constant(self.previous.clone())
     }
 
     fn declare_variable(&mut self) {
-        if self.scope.is_global() {
+        if self.compiler.is_global_scope() {
             return;
         }
         let token = self.previous.clone();
-        if self.scope.has_declared_variable(&token) {
+        if self.compiler.has_declared_variable(&token) {
             self.error("Already a variable with this name in this scope");
         }
         self.add_local(token);
     }
 
     fn add_local(&mut self, token: Token) {
-        if !self.scope.has_capacity() {
+        if !self.compiler.has_capacity() {
             self.error("Too many local variables in function");
             return;
         }
         let local = Local::with_name(token.text);
-        self.scope.push(local);
+        self.compiler.push(local);
     }
 
     fn identifier_constant(&mut self, token: Token) -> u8 {
@@ -107,8 +107,8 @@ impl Parser {
     }
 
     fn define_variable(&mut self, global: u8) {
-        if self.scope.is_local() {
-            self.scope.mark_initialized();
+        if self.compiler.is_local_scope() {
+            self.compiler.mark_initialized();
             return;
         }
         self.emit_instruction(&Instruction::DefineGlobal(global));
@@ -153,7 +153,7 @@ impl Parser {
     }
 
     fn begin_scope(&mut self) {
-        self.scope.begin_scope();
+        self.compiler.begin_scope();
     }
 
     fn block(&mut self) {
@@ -163,8 +163,9 @@ impl Parser {
         self.consume(TokenType::RightBrace, "Expect '}' after block");
     }
 
+    // TODO: move whole function to compiler struct
     fn end_scope(&mut self) {
-        let pops = self.scope.end_scope();
+        let pops = self.compiler.end_scope();
         for _ in 0..pops {
             self.emit_instruction(&Instruction::Pop);
         }
@@ -192,7 +193,7 @@ impl Parser {
 
         if !self.is_match(TokenType::RightParenthesis) {
             let body_jump = self.emit_instruction(&Instruction::stub_jump());
-            let increment_start = self.chunk.len();
+            let increment_start = self.chunk_position();
             self.expression();
             self.emit_instruction(&Instruction::Pop);
             self.consume(TokenType::RightParenthesis, "Expect ')' after for clauses");
@@ -280,7 +281,7 @@ impl Parser {
                 self.consume(TokenType::Colon, "Expect ':' after default case");
                 // jump to end-of-default block
                 let default_exit_jump = self.emit_instruction(&Instruction::stub_jump());
-                default_offset = Some(self.chunk.len());
+                default_offset = Some(self.chunk_position());
                 self.switch_branch_statement();
                 let exit_jump = self.emit_instruction(&Instruction::stub_jump());
                 exit_jumps.push(exit_jump);
@@ -328,7 +329,7 @@ impl Parser {
     }
 
     fn mark_start_loop(&mut self) -> usize {
-        let start = self.chunk.len();
+        let start = self.chunk_position();
         let data = LoopData::new(start);
         self.loop_stack.push(data);
         start
@@ -342,17 +343,6 @@ impl Parser {
         for exit_jump in val.breaks {
             self.patch_jump(exit_jump);
         }
-    }
-
-    fn emit_loop(&mut self, loop_start: usize) {
-        let instr = Instruction::Loop(0x0, 0x0);
-        let size = instr.size();
-        let offset = self.chunk.len() - loop_start + size;
-        if offset > u16::MAX as usize {
-            self.error("Jump size is too large");
-        }
-        let (f, s) = jump_to_bytes(offset);
-        self.emit_instruction(&Instruction::Loop(f, s));
     }
 
     fn continue_statement(&mut self) {
@@ -491,10 +481,6 @@ impl Parser {
         self.emit_return();
     }
 
-    fn emit_return(&mut self) {
-        self.emit_instruction(&Instruction::Return);
-    }
-
     fn and(&mut self, _can_assign: bool) {
         let end_jump = self.emit_instruction(&Instruction::stub_jump_if_false());
         self.emit_instruction(&Instruction::Pop);
@@ -580,7 +566,7 @@ impl Parser {
     }
 
     fn named_variable(&mut self, token: Token, can_assign: bool) {
-        let (getter, setter) = if let Some(info) = self.scope.resolve_local(&token) {
+        let (getter, setter) = if let Some(info) = self.compiler.resolve_local(&token) {
             if info.depth.is_none() {
                 self.error("Can't read local variable in its own initializer");
             }
@@ -631,12 +617,10 @@ impl Parser {
             _ => Default::default(),
         }
     }
+}
 
-    fn emit_constant(&mut self, value: Value) {
-        let idx = self.make_constant(value);
-        self.emit_instruction(&Instruction::Constant(idx));
-    }
-
+// TODO: move to compiler
+impl Parser {
     fn make_constant(&mut self, value: Value) -> u8 {
         let idx = self.chunk.add_constant(value);
         if idx > u8::MAX as usize {
@@ -649,14 +633,51 @@ impl Parser {
         idx as u8
     }
 
+    fn emit_constant(&mut self, value: Value) {
+        let idx = self.make_constant(value);
+        self.emit_instruction(&Instruction::Constant(idx));
+    }
+
+    fn emit_loop(&mut self, loop_start: usize) {
+        let instr = Instruction::Loop(0x0, 0x0);
+        let size = instr.size();
+        let offset = self.chunk_position() - loop_start + size;
+        if offset > u16::MAX as usize {
+            self.error("Jump size is too large");
+        }
+        let (f, s) = jump_to_bytes(offset);
+        self.emit_instruction(&Instruction::Loop(f, s));
+    }
+
+    fn emit_return(&mut self) {
+        self.emit_instruction(&Instruction::Return);
+    }
+
+    fn emit_instructions(&mut self, instruction: &[Instruction]) {
+        instruction
+            .iter()
+            .for_each(|inst| _ = self.emit_instruction(inst));
+    }
+
     fn emit_instruction(&mut self, instruction: &Instruction) -> usize {
-        let start = self.chunk.len();
         let line = self.previous.position.line;
+        self.emit_instruction_at_line(instruction, line)
+    }
+
+    fn emit_instruction_at_line(&mut self, instruction: &Instruction, line: usize) -> usize {
+        let start = self.chunk_position();
         let bytes: Vec<u8> = instruction.as_vec();
         for byte in bytes.into_iter() {
             self.chunk.write_u8(byte, line);
         }
         start
+    }
+
+    fn patch_instruction(&mut self, instruction: &Instruction, offset: usize) {
+        let bytes: Vec<u8> = instruction.as_vec();
+        for (idx, byte) in bytes.into_iter().enumerate() {
+            self.chunk.patch_u8(byte, offset + idx);
+        }
     }
 
     fn patch_jump(&mut self, offset: usize) {
@@ -667,7 +688,7 @@ impl Parser {
             (res, size)
         };
 
-        let jump = self.chunk.len() - offset - size;
+        let jump = self.chunk_position() - offset - size;
         if jump > u16::MAX as usize {
             self.error("Too much code to jump over");
         }
@@ -687,17 +708,8 @@ impl Parser {
         self.patch_instruction(&instr, offset);
     }
 
-    fn patch_instruction(&mut self, instruction: &Instruction, offset: usize) {
-        let bytes: Vec<u8> = instruction.as_vec();
-        for (idx, byte) in bytes.into_iter().enumerate() {
-            self.chunk.patch_u8(byte, offset + idx);
-        }
-    }
-
-    fn emit_instructions(&mut self, instruction: &[Instruction]) {
-        instruction
-            .iter()
-            .for_each(|inst| _ = self.emit_instruction(inst));
+    fn chunk_position(&self) -> usize {
+        self.chunk.size()
     }
 }
 
