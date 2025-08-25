@@ -1,7 +1,12 @@
 use crate::{
     ErrorInfo, Instruction, Value,
-    compiler::{Local, LocalVariableInfo, MAX_SCOPE_SIZE, Token, TokenType, scanner::TokenSource},
+    compiler::{
+        Local, LocalVariableInfo, MAX_SCOPE_SIZE, Token, TokenType, rule::Precedence,
+        scanner::TokenSource,
+    },
 };
+
+type ParseRule = super::rule::ParseRule<Frontend>;
 
 pub struct Frontend {
     parser: Parser,
@@ -44,7 +49,7 @@ impl Frontend {
     }
 
     fn check(&self, t_type: TokenType) -> bool {
-        self.parser.cur_token_type() == t_type
+        self.cur_token_type() == t_type
     }
 
     fn declaration(&mut self) {
@@ -60,11 +65,11 @@ impl Frontend {
 
     fn synchronize(&mut self) {
         self.panic_mode = false;
-        while !matches!(self.parser.cur_token_type(), TokenType::Eof) {
-            if matches!(self.parser.prev_token_type(), TokenType::Semicolon) {
+        while !matches!(self.cur_token_type(), TokenType::Eof) {
+            if matches!(self.prev_token_type(), TokenType::Semicolon) {
                 return;
             }
-            match self.parser.cur_token_type() {
+            match self.cur_token_type() {
                 TokenType::Class
                 | TokenType::Fun
                 | TokenType::Var
@@ -80,7 +85,7 @@ impl Frontend {
     }
 
     fn consume<T: AsRef<str>>(&mut self, t_type: TokenType, message: T) {
-        if self.parser.cur_token_type() == t_type {
+        if self.cur_token_type() == t_type {
             self.advance();
             return;
         };
@@ -96,7 +101,161 @@ impl Frontend {
 /// expressions
 impl Frontend {
     fn expression(&mut self) {
-        todo!()
+        self.parse_precedence(Precedence::Assignment);
+    }
+
+    fn parse_precedence(&mut self, precedence: Precedence) {
+        self.advance();
+        let t_type = self.prev_token_type();
+        let Some(prefix_rule) = self.get_rule(t_type).prefix else {
+            self.error("Expect expression");
+            return;
+        };
+
+        let can_assign = precedence.le(&Precedence::Assignment);
+        prefix_rule(self, can_assign);
+
+        while precedence.le(&self.get_rule(self.cur_token_type()).precedence) {
+            self.advance();
+            let infix_rule = self
+                .get_rule(self.prev_token_type())
+                .infix
+                .expect("Infix is none");
+            infix_rule(self, can_assign);
+        }
+
+        if can_assign && self.is_match(TokenType::Equal) {
+            self.error("Invalid assignment target");
+        }
+    }
+
+    fn get_rule(&self, t_type: TokenType) -> ParseRule {
+        use TokenType::*;
+        match t_type {
+            LeftParenthesis => ParseRule::new(Some(Self::grouping), None, Precedence::None),
+            Minus => ParseRule::new(Some(Self::unary), Some(Self::binary), Precedence::Term),
+            Plus => ParseRule::new(None, Some(Self::binary), Precedence::Term),
+            Slash | Star => ParseRule::new(None, Some(Self::binary), Precedence::Factor),
+            Number => ParseRule::new(Some(Self::number), None, Precedence::None),
+            Nil | False | True => ParseRule::new(Some(Self::literal), None, Precedence::None),
+            Bang => ParseRule::new(Some(Self::unary), None, Precedence::None),
+            EqualEqual | BangEqual => {
+                ParseRule::new(None, Some(Self::binary), Precedence::Equality)
+            }
+            Greater | GreaterEqual | Less | LessEqual => {
+                ParseRule::new(None, Some(Self::binary), Precedence::Comparison)
+            }
+            TokenType::String => ParseRule::new(Some(Self::string), None, Precedence::None),
+            Identifier => ParseRule::new(Some(Self::variable), None, Precedence::None),
+            And => ParseRule::new(None, Some(Self::and), Precedence::And),
+            Or => ParseRule::new(None, Some(Self::or), Precedence::Or),
+            _ => Default::default(),
+        }
+    }
+
+    fn and(&mut self, _can_assign: bool) {
+        let end_jump = self.emit_instruction(&Instruction::stub_jump_if_false());
+        self.emit_instruction(&Instruction::Pop);
+        self.parse_precedence(Precedence::And);
+        self.patch_jump(end_jump);
+    }
+
+    fn binary(&mut self, _can_assign: bool) {
+        let operator_type = self.prev_token_type();
+        let rule = self.get_rule(operator_type);
+        self.parse_precedence(rule.precedence.increased());
+
+        let array: &[Instruction] = match operator_type {
+            TokenType::BangEqual => &[Instruction::Equal, Instruction::Not],
+            TokenType::EqualEqual => &[Instruction::Equal],
+            TokenType::Greater => &[Instruction::Greater],
+            TokenType::GreaterEqual => &[Instruction::Less, Instruction::Not],
+            TokenType::Less => &[Instruction::Less],
+            TokenType::LessEqual => &[Instruction::Greater, Instruction::Not],
+            TokenType::Plus => &[Instruction::Add],
+            TokenType::Minus => &[Instruction::Subtract],
+            TokenType::Star => &[Instruction::Multiply],
+            TokenType::Slash => &[Instruction::Divide],
+            x => unreachable!("Unexpected binary operator {x:?}"),
+        };
+        self.emit_instructions(array);
+    }
+
+    fn grouping(&mut self, _can_assign: bool) {
+        self.expression();
+        self.consume(TokenType::RightParenthesis, "Expect ')' after expression");
+    }
+
+    fn literal(&mut self, _can_assign: bool) {
+        match self.prev_token_type() {
+            TokenType::False => self.emit_instruction(&Instruction::False),
+            TokenType::True => self.emit_instruction(&Instruction::True),
+            TokenType::Nil => self.emit_instruction(&Instruction::Nil),
+            _ => unreachable!("literal"),
+        };
+    }
+
+    fn number(&mut self, _can_assign: bool) {
+        // I don't like this approach
+        // according to strtod it returns 0.0 as fallback
+        let value = Value::number_from(self.prev_token_text()).unwrap_or(Value::Number(0.0));
+        self.emit_constant(value);
+    }
+
+    fn or(&mut self, _can_assign: bool) {
+        let else_jump = self.emit_instruction(&Instruction::stub_jump_if_false());
+        let end_jump = self.emit_instruction(&Instruction::stub_jump());
+
+        self.patch_jump(else_jump);
+        self.emit_instruction(&Instruction::Pop);
+
+        self.parse_precedence(Precedence::Or);
+        self.patch_jump(end_jump);
+    }
+
+    fn string(&mut self, _can_assign: bool) {
+        let s = self.prev_token_text();
+        let text = &s[1..s.len() - 1];
+        self.emit_constant(Value::text_from_str(text));
+    }
+
+    fn unary(&mut self, _can_assign: bool) {
+        // TODO: made according to the book, looks bad...
+        let operator_type = self.prev_token_type();
+        // Compile the operand
+        self.parse_precedence(Precedence::Unary);
+
+        // Emit the operator instruction
+        match operator_type {
+            TokenType::Minus => self.emit_instruction(&Instruction::Negate),
+            TokenType::Bang => self.emit_instruction(&Instruction::Not),
+            _ => unreachable!("unary"),
+        };
+    }
+
+    fn variable(&mut self, can_assign: bool) {
+        self.named_variable(self.prev_token_owned(), can_assign);
+    }
+
+    fn named_variable(&mut self, token: Token, can_assign: bool) {
+        let (getter, setter) = if let Some(info) = self.compiler.resolve_local(&token) {
+            if info.depth.is_none() {
+                self.error("Can't read local variable in its own initializer");
+            }
+            (
+                Instruction::GetLocal(info.index),
+                Instruction::SetLocal(info.index),
+            )
+        } else {
+            let idx = self.identifier_constant(token);
+            (Instruction::GetGlobal(idx), Instruction::SetGlobal(idx))
+        };
+        if can_assign && self.is_match(TokenType::Equal) {
+            self.expression();
+            self.emit_instruction(&setter);
+        } else {
+            self.emit_instruction(&getter);
+        }
     }
 }
 
@@ -124,14 +283,14 @@ impl Frontend {
         if self.compiler.is_local_scope() {
             return 0;
         }
-        self.identifier_constant(self.parser.previous.clone())
+        self.identifier_constant(self.prev_token_owned())
     }
 
     fn declare_variable(&mut self) {
         if self.compiler.is_global_scope() {
             return;
         }
-        let token = self.parser.previous.clone();
+        let token = self.prev_token_owned();
         if self.compiler.has_declared_variable(&token) {
             self.error("Already a variable with this name in this scope");
         }
@@ -268,6 +427,10 @@ impl Frontend {
         todo!()
     }
 
+    fn emit_constant(&mut self, value: Value) -> usize {
+        todo!()
+    }
+
     fn emit_instruction(&mut self, instruction: &Instruction) -> usize {
         let line = self.parser.get_line();
         self.compiler.emit_instruction_at_line(instruction, line)
@@ -275,6 +438,16 @@ impl Frontend {
 
     fn emit_return(&mut self) -> usize {
         self.emit_instruction(&Instruction::Return)
+    }
+
+    fn emit_instructions(&mut self, instruction: &[Instruction]) {
+        instruction
+            .iter()
+            .for_each(|inst| _ = self.emit_instruction(inst));
+    }
+
+    fn patch_jump(&mut self, offset: usize) {
+        todo!()
     }
 }
 
@@ -285,7 +458,7 @@ impl Frontend {
     }
 
     fn error(&mut self, message: &str) {
-        self.push_error_info(self.parser.previous.clone(), message);
+        self.push_error_info(self.prev_token_owned(), message);
     }
 
     // convenience function
@@ -296,6 +469,25 @@ impl Frontend {
         self.panic_mode = true;
         let info = ErrorInfo::with(elem, message);
         self.errors.push(info);
+    }
+}
+
+/// Shorthands
+impl Frontend {
+    fn prev_token_owned(&self) -> Token {
+        self.parser.previous.clone()
+    }
+
+    fn prev_token_text(&self) -> &str {
+        &self.parser.previous.text
+    }
+
+    fn cur_token_type(&self) -> TokenType {
+        self.parser.cur_token_type()
+    }
+
+    fn prev_token_type(&self) -> TokenType {
+        self.parser.prev_token_type()
     }
 }
 
@@ -437,6 +629,21 @@ mod tests {
         assert!(!frontend.is_match(TokenType::False));
         assert_eq!(frontend.parser.previous, Token::undefined());
         assert_eq!(frontend.parser.current, Token::plus());
+    }
+
+    #[test]
+    fn token_shorthands_test() {
+        let mut frontend =
+            compose_frontend_with_tokens(vec![Token::plus(), Token::minus(), Token::number("123")]);
+        frontend.advance();
+        frontend.advance();
+        assert_eq!(frontend.prev_token_type(), frontend.parser.previous.t_type);
+        assert_eq!(frontend.cur_token_type(), frontend.parser.current.t_type);
+
+        assert_eq!(frontend.prev_token_type(), TokenType::Plus);
+        assert_eq!(frontend.cur_token_type(), TokenType::Minus);
+
+        assert_eq!(frontend.prev_token_owned(), frontend.parser.previous);
     }
 
     //
