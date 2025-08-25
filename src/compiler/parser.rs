@@ -1,7 +1,7 @@
 use crate::{
     compiler::{
+        compiler::{Compiler, Local},
         scanner::TokenSource,
-        scope::{Local, Scope},
         token::{Token, TokenType},
     },
     data::{Chunk, Instruction, Value},
@@ -16,7 +16,7 @@ pub struct Parser {
     panic_mode: bool,
     chunk: Chunk,
     errors: Vec<ErrorInfo>,
-    scope: Scope,
+    scope: Compiler,
     loop_stack: Vec<LoopData>,
 }
 

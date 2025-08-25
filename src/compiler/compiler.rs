@@ -7,14 +7,13 @@ pub struct LocalVariableInfo {
     pub depth: Option<usize>,
 }
 
-// I think the 'Compiler' is strange name for scope manager
 #[derive(Default)]
-pub struct Scope {
+pub struct Compiler {
     locals: Vec<Local>,
     depth: usize,
 }
 
-impl Scope {
+impl Compiler {
     pub fn begin_scope(&mut self) {
         self.depth += 1;
     }
