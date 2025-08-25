@@ -17,6 +17,42 @@ use crate::{
     utils::shared,
 };
 
+// /////////////////////////////////////////////////
+// WARNING: these definitions located here temporary
+pub const MAX_SCOPE_SIZE: usize = 256;
+
+pub struct LocalVariableInfo {
+    pub index: u8,
+    pub depth: Option<usize>,
+}
+
+pub struct Local {
+    name: String,
+    depth: Option<usize>,
+}
+
+impl Local {
+    pub fn with_name(name: String) -> Self {
+        Self { name, depth: None }
+    }
+}
+
+struct LoopData {
+    start: usize,
+    breaks: Vec<usize>,
+}
+
+impl LoopData {
+    fn new(start: usize) -> Self {
+        Self {
+            start,
+            breaks: Default::default(),
+        }
+    }
+}
+// WARNING: end
+// /////////////////////////////////////////////////
+
 pub fn compile(code: Rc<Vec<char>>) -> Result<Chunk, Vec<ErrorInfo>> {
     let error_collector = shared(ErrorCollector::new());
     let scanner = Scanner::new(code);

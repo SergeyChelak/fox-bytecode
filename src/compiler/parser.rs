@@ -1,7 +1,8 @@
 use crate::{
     ErrorCollector,
     compiler::{
-        compiler::{Compiler, Local},
+        Local, LoopData,
+        compiler::Compiler,
         scanner::TokenSource,
         token::{Token, TokenType},
     },
@@ -733,20 +734,6 @@ impl Default for ParseRule {
             precedence: Precedence::None,
             prefix: Default::default(),
             infix: Default::default(),
-        }
-    }
-}
-
-struct LoopData {
-    start: usize,
-    breaks: Vec<usize>,
-}
-
-impl LoopData {
-    fn new(start: usize) -> Self {
-        Self {
-            start,
-            breaks: Default::default(),
         }
     }
 }

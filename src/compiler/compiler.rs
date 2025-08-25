@@ -1,15 +1,8 @@
 use crate::{
     Chunk, ErrorCollector, Func, FuncType, Instruction, Value,
-    compiler::Token,
+    compiler::{Local, LocalVariableInfo, MAX_SCOPE_SIZE, Token},
     utils::{Shared, jump_to_bytes},
 };
-
-const MAX_SCOPE_SIZE: usize = 256;
-
-pub struct LocalVariableInfo {
-    pub index: u8,
-    pub depth: Option<usize>,
-}
 
 pub struct Compiler {
     func: Box<Func>,
@@ -205,17 +198,6 @@ impl Compiler {
             panic!();
         };
         local.depth = Some(self.depth);
-    }
-}
-
-pub struct Local {
-    name: String,
-    depth: Option<usize>,
-}
-
-impl Local {
-    pub fn with_name(name: String) -> Self {
-        Self { name, depth: None }
     }
 }
 
