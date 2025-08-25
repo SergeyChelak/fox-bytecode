@@ -53,7 +53,7 @@ impl Scope {
             if depth < self.depth {
                 break;
             }
-            if local.name.text == token.text {
+            if local.name == token.text {
                 return true;
             }
         }
@@ -62,7 +62,7 @@ impl Scope {
 
     pub fn resolve_local(&self, token: &Token) -> Option<LocalVariableInfo> {
         for (i, local) in self.locals.iter().enumerate().rev() {
-            if local.name.text == token.text {
+            if local.name == token.text {
                 let info = LocalVariableInfo {
                     index: i as u8,
                     depth: local.depth,
@@ -89,15 +89,12 @@ impl Scope {
 }
 
 pub struct Local {
-    name: Token,
+    name: String,
     depth: Option<usize>,
 }
 
 impl Local {
-    pub fn with_token(token: Token) -> Self {
-        Self {
-            name: token,
-            depth: None,
-        }
+    pub fn with_name(name: String) -> Self {
+        Self { name, depth: None }
     }
 }

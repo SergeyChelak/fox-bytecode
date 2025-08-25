@@ -98,7 +98,7 @@ impl Parser {
             self.error("Too many local variables in function");
             return;
         }
-        let local = Local::with_token(token);
+        let local = Local::with_name(token.text);
         self.scope.push(local);
     }
 
