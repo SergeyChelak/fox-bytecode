@@ -11,10 +11,11 @@ pub struct Compiler {
 }
 
 impl Compiler {
-    pub fn with(enclosing: Option<Box<Compiler>>) -> Self {
+    pub fn with(func_type: FuncType, enclosing: Option<Box<Compiler>>) -> Self {
         Self {
             func: Default::default(),
-            func_type: FuncType::Script,
+            func_type,
+            // FIXME: !!!!!!!!!!!!!!!!!!!!!!!!!!
             locals: Vec::new(),
             // locals: vec![Local::reserved()],
             depth: Default::default(),
@@ -175,7 +176,7 @@ mod test {
 
     #[test]
     fn patch_instruction() {
-        let mut compiler = Compiler::with(None);
+        let mut compiler = Compiler::with(FuncType::Script, None);
         compiler.emit_instruction_at_line(&Instruction::Add, 0);
         let emit_addr = compiler.emit_instruction_at_line(&Instruction::Constant(1), 0);
         compiler.emit_instruction_at_line(&Instruction::Subtract, 0);

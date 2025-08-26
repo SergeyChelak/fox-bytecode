@@ -1,5 +1,5 @@
 use crate::{
-    ErrorInfo, Instruction, Value,
+    ErrorInfo, FuncType, Instruction, Value,
     frontend::{
         Token, TokenType,
         compiler::{Compiler, Local},
@@ -35,7 +35,7 @@ impl Assembler {
     }
 
     pub fn compile(mut self) -> Result<Compiler, Vec<ErrorInfo>> {
-        self.init_compiler();
+        self.init_compiler(FuncType::Script);
         self.advance();
         while !self.is_match(TokenType::Eof) {
             self.declaration();
@@ -128,8 +128,8 @@ impl Assembler {
 
 /// Functions
 impl Assembler {
-    fn init_compiler(&mut self) {
-        let compiler = Compiler::with(self.compiler.take());
+    fn init_compiler(&mut self, func_type: FuncType) {
+        let compiler = Compiler::with(func_type, self.compiler.take());
         self.compiler = Some(Box::new(compiler));
     }
 }
