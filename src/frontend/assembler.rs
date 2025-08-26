@@ -9,9 +9,9 @@ use crate::{
     utils::jump_to_bytes,
 };
 
-type ParseRule = super::rule::ParseRule<Frontend>;
+type ParseRule = super::rule::ParseRule<Assembler>;
 
-pub struct Frontend {
+pub struct Assembler {
     current: Token,
     previous: Token,
     compiler: Compiler,
@@ -21,7 +21,7 @@ pub struct Frontend {
     loop_stack: Vec<LoopData>,
 }
 
-impl Frontend {
+impl Assembler {
     pub fn new(scanner: Box<dyn TokenSource>) -> Self {
         Self {
             current: Token::undefined(),
@@ -119,7 +119,7 @@ impl Frontend {
 }
 
 /// expressions
-impl Frontend {
+impl Assembler {
     fn expression(&mut self) {
         self.parse_precedence(Precedence::Assignment);
     }
@@ -280,7 +280,7 @@ impl Frontend {
 }
 
 /// Variables
-impl Frontend {
+impl Assembler {
     fn var_declaration(&mut self) {
         let global = self.parse_variable("Expect variable name");
 
@@ -340,7 +340,7 @@ impl Frontend {
 }
 
 /// Statements
-impl Frontend {
+impl Assembler {
     fn statement(&mut self) {
         if self.is_match(TokenType::Print) {
             self.print_statement();
@@ -599,7 +599,7 @@ impl Frontend {
 }
 
 /// Emit functions
-impl Frontend {
+impl Assembler {
     fn make_constant(&mut self, value: Value) -> u8 {
         let idx = self.compiler.add_constant(value);
         if idx > u8::MAX as usize {
@@ -671,7 +671,7 @@ impl Frontend {
 }
 
 // Errors
-impl Frontend {
+impl Assembler {
     fn error_at_current(&mut self, message: &str) {
         self.push_error_info(self.current.clone(), message);
     }
@@ -692,7 +692,7 @@ impl Frontend {
 }
 
 /// Shorthands
-impl Frontend {
+impl Assembler {
     fn prev_token_owned(&self) -> Token {
         self.previous.clone()
     }
@@ -800,13 +800,13 @@ mod tests {
     }
 
     //
-    fn compose_frontend_with_tokens(tokens: Vec<Token>) -> Frontend {
+    fn compose_frontend_with_tokens(tokens: Vec<Token>) -> Assembler {
         let scanner = ScannerMock::new(tokens);
         compose_frontend(Box::new(scanner))
     }
 
-    fn compose_frontend(scanner: Box<dyn TokenSource>) -> Frontend {
-        Frontend::new(scanner)
+    fn compose_frontend(scanner: Box<dyn TokenSource>) -> Assembler {
+        Assembler::new(scanner)
     }
 
     // legacy test group
@@ -929,7 +929,7 @@ mod tests {
 
     fn state_expectation_test(input: Vec<Token>, expectation: Expectation) {
         let mock = ScannerMock::new(input);
-        let parser = Frontend::new(Box::new(mock));
+        let parser = Assembler::new(Box::new(mock));
         let compiler = parser.compile().expect("Failed to perform expectation");
 
         for (i, x) in expectation.constants.iter().enumerate() {
