@@ -14,7 +14,7 @@ type ParseRule = super::rule::ParseRule<Assembler>;
 pub struct Assembler {
     current: Token,
     previous: Token,
-    compiler: Compiler,
+    compiler: Option<Box<Compiler>>,
     scanner: Box<dyn TokenSource>,
     panic_mode: bool,
     errors: Vec<ErrorInfo>,
@@ -26,7 +26,7 @@ impl Assembler {
         Self {
             current: Token::undefined(),
             previous: Token::undefined(),
-            compiler: Compiler::new(),
+            compiler: None,
             scanner,
             panic_mode: false,
             errors: Vec::new(),
@@ -35,14 +35,22 @@ impl Assembler {
     }
 
     pub fn compile(mut self) -> Result<Compiler, Vec<ErrorInfo>> {
+        self.init_compiler();
         self.advance();
         while !self.is_match(TokenType::Eof) {
             self.declaration();
         }
         self.end_compiler();
-        if self.errors.is_empty() {
-            return Ok(self.compiler);
+
+        if !self.errors.is_empty() {
+            return Err(self.errors);
         }
+
+        if let Some(compiler) = self.compiler {
+            return Ok(*compiler);
+        }
+
+        self.error("Compiler is None after 'compile'");
         Err(self.errors)
     }
 
@@ -115,6 +123,14 @@ impl Assembler {
 
     fn end_compiler(&mut self) {
         self.emit_return();
+    }
+}
+
+/// Functions
+impl Assembler {
+    fn init_compiler(&mut self) {
+        let compiler = Compiler::with(self.compiler.take());
+        self.compiler = Some(Box::new(compiler));
     }
 }
 
@@ -258,7 +274,7 @@ impl Assembler {
     }
 
     fn named_variable(&mut self, token: Token, can_assign: bool) {
-        let (getter, setter) = if let Some(info) = self.compiler.resolve_local(&token) {
+        let (getter, setter) = if let Some(info) = self.compiler().resolve_local(&token) {
             if info.depth.is_none() {
                 self.error("Can't read local variable in its own initializer");
             }
@@ -300,35 +316,35 @@ impl Assembler {
     fn parse_variable(&mut self, message: &str) -> u8 {
         self.consume(TokenType::Identifier, message);
         self.declare_variable();
-        if self.compiler.is_local_scope() {
+        if self.compiler().is_local_scope() {
             return 0;
         }
         self.identifier_constant(self.prev_token_owned())
     }
 
     fn declare_variable(&mut self) {
-        if self.compiler.is_global_scope() {
+        if self.compiler().is_global_scope() {
             return;
         }
         let token = self.prev_token_owned();
-        if self.compiler.has_declared_variable(&token) {
+        if self.compiler().has_declared_variable(&token) {
             self.error("Already a variable with this name in this scope");
         }
         self.add_local(token);
     }
 
     fn add_local(&mut self, token: Token) {
-        if !self.compiler.has_capacity() {
+        if !self.compiler().has_capacity() {
             self.error("Too many local variables in function");
             return;
         }
         let local = Local::with_name(token.text);
-        self.compiler.push_local(local);
+        self.compiler_mut().push_local(local);
     }
 
     fn define_variable(&mut self, global: u8) {
-        if self.compiler.is_local_scope() {
-            self.compiler.mark_initialized();
+        if self.compiler().is_local_scope() {
+            self.compiler_mut().mark_initialized();
             return;
         }
         self.emit_instruction(&Instruction::DefineGlobal(global));
@@ -577,7 +593,7 @@ impl Assembler {
     }
 
     fn begin_scope(&mut self) {
-        self.compiler.begin_scope();
+        self.compiler_mut().begin_scope();
     }
 
     fn block(&mut self) {
@@ -588,7 +604,8 @@ impl Assembler {
     }
 
     fn end_scope(&mut self) {
-        self.compiler.end_scope(self.get_line());
+        let line = self.get_line();
+        self.compiler_mut().end_scope(line);
     }
 
     fn print_statement(&mut self) {
@@ -601,7 +618,7 @@ impl Assembler {
 /// Emit functions
 impl Assembler {
     fn make_constant(&mut self, value: Value) -> u8 {
-        let idx = self.compiler.add_constant(value);
+        let idx = self.compiler_mut().add_constant(value);
         if idx > u8::MAX as usize {
             self.error("Too many constants in one chunk");
             // don't think it's a good decision
@@ -622,7 +639,8 @@ impl Assembler {
 
     fn emit_instruction(&mut self, instruction: &Instruction) -> usize {
         let line = self.get_line();
-        self.compiler.emit_instruction_at_line(instruction, line)
+        self.compiler_mut()
+            .emit_instruction_at_line(instruction, line)
     }
 
     fn emit_instructions(&mut self, instruction: &[Instruction]) {
@@ -643,7 +661,7 @@ impl Assembler {
     }
 
     pub fn patch_jump(&mut self, offset: usize) {
-        let (fetch_result, size) = self.compiler.fetch_instruction(offset);
+        let (fetch_result, size) = self.compiler().fetch_instruction(offset);
 
         let jump = self.chunk_position() - offset - size;
         if jump > u16::MAX as usize {
@@ -662,11 +680,11 @@ impl Assembler {
                 return;
             }
         };
-        self.compiler.patch_instruction(&instr, offset);
+        self.compiler_mut().patch_instruction(&instr, offset);
     }
 
     fn chunk_position(&self) -> usize {
-        self.compiler.chunk_position()
+        self.compiler().chunk_position()
     }
 }
 
@@ -693,6 +711,17 @@ impl Assembler {
 
 /// Shorthands
 impl Assembler {
+    // Actually isn't great solution but it looks a critical issue if compiler is None
+    // so no reason to continue execution and panic is acceptable behavior.
+    // Will redesign by propagating result to each Assembler's function
+    fn compiler(&self) -> &Box<Compiler> {
+        self.compiler.as_ref().expect("Bug: compiler can't be None")
+    }
+
+    fn compiler_mut(&mut self) -> &mut Box<Compiler> {
+        self.compiler.as_mut().expect("Bug: compiler can't be None")
+    }
+
     fn prev_token_owned(&self) -> Token {
         self.previous.clone()
     }

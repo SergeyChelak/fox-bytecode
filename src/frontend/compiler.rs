@@ -7,16 +7,18 @@ pub struct Compiler {
     func_type: FuncType,
     locals: Vec<Local>,
     depth: usize,
+    enclosing: Option<Box<Compiler>>,
 }
 
 impl Compiler {
-    pub fn new() -> Self {
+    pub fn with(enclosing: Option<Box<Compiler>>) -> Self {
         Self {
             func: Default::default(),
             func_type: FuncType::Script,
             locals: Vec::new(),
             // locals: vec![Local::reserved()],
             depth: Default::default(),
+            enclosing,
         }
     }
 }
@@ -173,7 +175,7 @@ mod test {
 
     #[test]
     fn patch_instruction() {
-        let mut compiler = Compiler::new();
+        let mut compiler = Compiler::with(None);
         compiler.emit_instruction_at_line(&Instruction::Add, 0);
         let emit_addr = compiler.emit_instruction_at_line(&Instruction::Constant(1), 0);
         compiler.emit_instruction_at_line(&Instruction::Subtract, 0);
