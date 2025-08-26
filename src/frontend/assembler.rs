@@ -1,5 +1,7 @@
+use std::rc::Rc;
+
 use crate::{
-    ErrorInfo, FuncType, Instruction, Value,
+    ErrorInfo, Func, FuncType, Instruction, Value,
     frontend::{
         Token, TokenType,
         compiler::{Compiler, Local},
@@ -81,7 +83,9 @@ impl Assembler {
     }
 
     fn declaration(&mut self) {
-        if self.is_match(TokenType::Var) {
+        if self.is_match(TokenType::Fun) {
+            self.fun_declaration();
+        } else if self.is_match(TokenType::Var) {
             self.var_declaration();
         } else {
             self.statement();
@@ -124,6 +128,15 @@ impl Assembler {
     fn end_compiler(&mut self) {
         self.emit_return();
     }
+
+    fn _end_compiler(&mut self) -> Func {
+        self.emit_return();
+        let Some(mut compiler) = self.compiler.take() else {
+            panic!("Can't end compiler which is None")
+        };
+        self.compiler = compiler.enclosing.take();
+        compiler.function()
+    }
 }
 
 /// Functions
@@ -131,6 +144,26 @@ impl Assembler {
     fn init_compiler(&mut self, func_type: FuncType) {
         let compiler = Compiler::with(func_type, self.compiler.take());
         self.compiler = Some(Box::new(compiler));
+    }
+
+    fn fun_declaration(&mut self) {
+        let global = self.parse_variable("Expect function name");
+        self.compiler_mut().mark_initialized();
+        self.function(FuncType::Function);
+        self.define_variable(global);
+    }
+
+    fn function(&mut self, func_type: FuncType) {
+        self.init_compiler(func_type);
+        self.begin_scope();
+
+        self.consume(TokenType::LeftParenthesis, "Expect '(' after function name");
+        self.consume(TokenType::RightParenthesis, "Expect ')' after parameters");
+        self.consume(TokenType::LeftBrace, "Expect '{' before function body");
+        self.block();
+
+        let func = self._end_compiler();
+        self.emit_constant(Value::Fun(Rc::new(func)));
     }
 }
 

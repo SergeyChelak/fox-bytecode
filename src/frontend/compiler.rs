@@ -7,7 +7,7 @@ pub struct Compiler {
     func_type: FuncType,
     locals: Vec<Local>,
     depth: usize,
-    enclosing: Option<Box<Compiler>>,
+    pub(crate) enclosing: Option<Box<Compiler>>,
 }
 
 impl Compiler {
@@ -137,6 +137,9 @@ impl Compiler {
     }
 
     pub fn mark_initialized(&mut self) {
+        if self.depth == 0 {
+            return;
+        }
         let Some(local) = self.locals.last_mut() else {
             panic!();
         };
