@@ -4,9 +4,9 @@ use crate::Chunk;
 
 #[derive(Default, Debug)]
 pub struct Func {
-    arity: usize,
+    pub(crate) arity: usize,
     chunk: Chunk,
-    name: Option<String>,
+    pub(crate) name: Option<String>,
 }
 
 impl Func {
@@ -29,6 +29,7 @@ impl Display for Func {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
 pub enum FuncType {
     Script,
     Function,

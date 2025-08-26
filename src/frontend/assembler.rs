@@ -1,7 +1,7 @@
 use std::rc::Rc;
 
 use crate::{
-    ErrorInfo, Func, FuncType, Instruction, Value,
+    ErrorInfo, Func, FuncType, Instruction, MAX_FUNCTION_ARGUMENTS, Value,
     frontend::{
         Token, TokenType,
         compiler::{Compiler, Local},
@@ -126,14 +126,17 @@ impl Assembler {
             panic!("Can't end compiler which is None")
         };
         self.compiler = compiler.enclosing.take();
-        compiler.function()
+        compiler.function_consumed()
     }
 }
 
 /// Functions
 impl Assembler {
     fn init_compiler(&mut self, func_type: FuncType) {
-        let compiler = Compiler::with(func_type, self.compiler.take());
+        let mut compiler = Compiler::with(func_type, self.compiler.take());
+        if !matches!(func_type, FuncType::Script) {
+            compiler.assign_name(self.prev_token_text());
+        }
         self.compiler = Some(Box::new(compiler));
     }
 
@@ -149,6 +152,20 @@ impl Assembler {
         self.begin_scope();
 
         self.consume(TokenType::LeftParenthesis, "Expect '(' after function name");
+        if !self.check(TokenType::RightParenthesis) {
+            loop {
+                self.compiler_mut().function_mut().arity += 1;
+                if self.compiler().function().arity > MAX_FUNCTION_ARGUMENTS {
+                    self.error_at_current("Can't have more than 255 parameters");
+                }
+                let constant = self.parse_variable("Expect parameter name");
+                self.define_variable(constant);
+
+                if !self.is_match(TokenType::Comma) {
+                    break;
+                }
+            }
+        }
         self.consume(TokenType::RightParenthesis, "Expect ')' after parameters");
         self.consume(TokenType::LeftBrace, "Expect '{' before function body");
         self.block();

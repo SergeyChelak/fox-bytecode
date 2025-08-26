@@ -20,6 +20,10 @@ impl Compiler {
             enclosing,
         }
     }
+
+    pub fn assign_name(&mut self, name: &str) {
+        self.func.name = Some(name.to_string());
+    }
 }
 
 /// Shorthands
@@ -32,8 +36,16 @@ impl Compiler {
         self.func.chunk_mut()
     }
 
-    pub fn function(self) -> Func {
+    pub fn function_consumed(self) -> Func {
         *self.func
+    }
+
+    pub fn function(&self) -> &Func {
+        self.func.as_ref()
+    }
+
+    pub fn function_mut(&mut self) -> &mut Func {
+        self.func.as_mut()
     }
 
     pub fn chunk_position(&self) -> usize {
