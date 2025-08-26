@@ -15,9 +15,7 @@ impl Compiler {
         Self {
             func: Default::default(),
             func_type,
-            // FIXME: !!!!!!!!!!!!!!!!!!!!!!!!!!
-            locals: Vec::new(),
-            // locals: vec![Local::reserved()],
+            locals: vec![Local::reserved()],
             depth: Default::default(),
             enclosing,
         }

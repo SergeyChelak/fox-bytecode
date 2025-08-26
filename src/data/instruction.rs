@@ -70,6 +70,7 @@ pub enum FetchError {
     Unknown(u8),
     Broken,
     End,
+    Other(String),
 }
 
 impl Display for FetchError {
@@ -78,6 +79,7 @@ impl Display for FetchError {
             FetchError::Unknown(x) => write!(f, "Unknown instruction {x}"),
             FetchError::Broken => write!(f, "Broken instruction"),
             FetchError::End => write!(f, "End of program"),
+            FetchError::Other(val) => write!(f, "{val}"),
         }
     }
 }

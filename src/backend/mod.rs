@@ -14,6 +14,13 @@ pub struct MachineError {
 }
 
 impl MachineError {
+    pub fn with_str(msg: &str) -> Self {
+        Self {
+            text: msg.to_string(),
+            line_number: None,
+        }
+    }
+
     pub fn message(&self) -> &str {
         self.text.as_str()
     }

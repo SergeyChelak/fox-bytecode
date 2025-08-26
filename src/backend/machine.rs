@@ -5,15 +5,24 @@ use crate::{MachineError, MachineResult, backend::MachineIO, data::*, utils::byt
 const FRAMES_MAX: usize = 64;
 const STACK_MAX_SIZE: usize = FRAMES_MAX * UINT8_COUNT;
 
-// struct CallFrame {
-//     func: Rc<Func>,
-//     ip: usize,
-//     frame_start: usize,
-// }
+struct CallFrame {
+    func_ref: Rc<Func>,
+    ip: usize,
+    frame_start: usize,
+}
+
+impl CallFrame {
+    fn ip_inc(&mut self, val: usize) {
+        self.ip += val;
+    }
+
+    fn ip_dec(&mut self, val: usize) {
+        self.ip -= val;
+    }
+}
 
 pub struct Machine {
-    chunk: Chunk,
-    ip: usize,
+    frames: Vec<CallFrame>,
     stack: Vec<Value>,
     globals: HashMap<Rc<String>, Value>,
     io: Rc<RefCell<dyn MachineIO>>,
@@ -21,14 +30,22 @@ pub struct Machine {
 
 impl Machine {
     pub fn with(func: Func, io: Rc<RefCell<dyn MachineIO>>) -> Self {
+        let mut vm = Self::new(io);
+        let func_ref = Rc::new(func);
+        _ = vm.stack_push(Value::Fun(func_ref.clone()));
+        vm.call(func_ref, 0);
+        vm
+    }
+
+    fn new(io: Rc<RefCell<dyn MachineIO>>) -> Self {
         Self {
-            chunk: func.chunk().clone(),
-            ip: 0,
-            stack: Vec::<Value>::with_capacity(STACK_MAX_SIZE),
+            frames: Vec::with_capacity(FRAMES_MAX),
+            stack: Vec::with_capacity(STACK_MAX_SIZE),
             globals: HashMap::new(),
             io,
         }
     }
+
     pub fn run(&mut self) -> MachineResult<()> {
         let result = self.perform();
         if let Err(err) = &result {
@@ -40,14 +57,12 @@ impl Machine {
 
     fn perform(&mut self) -> MachineResult<()> {
         'run_loop: loop {
-            // let ip = self.ip;
-            let fetch_result = self.chunk.fetch(&mut self.ip);
+            let fetch_result = self.fetch_instruction();
             let instr = match fetch_result {
                 Ok(instr) => instr,
                 Err(FetchError::End) => break,
                 Err(err) => return Err(self.runtime_error(format!("{err}"))),
             };
-            // println!("{}", self.chunk.disassemble_instruction(&instr, ip));
             match instr {
                 Instruction::Constant(index) => {
                     let value = self.read_const(index)?;
@@ -87,17 +102,19 @@ impl Machine {
                 Instruction::DefineGlobal(index) => self.define_global(index)?,
                 Instruction::GetGlobal(index) => self.get_global(index)?,
                 Instruction::SetGlobal(index) => self.set_global(index)?,
-                Instruction::GetLocal(slot) => {
+                Instruction::GetLocal(rel_slot) => {
+                    let slot = self.relative_to_absolute_slot(rel_slot)?;
                     let Some(value) = self.stack.get(slot as usize).cloned() else {
                         let msg = format!("Bug: failed to get local value with '{:?}'", instr);
                         return Err(self.runtime_error(msg));
                     };
                     self.stack_push(value)?
                 }
-                Instruction::SetLocal(slot) => {
+                Instruction::SetLocal(rel_slot) => {
                     let Some(value) = self.stack_peek() else {
                         return Err(self.runtime_error("Bug: empty stack on 'SetLocal'"));
                     };
+                    let slot = self.relative_to_absolute_slot(rel_slot)?;
                     self.stack[slot as usize] = value;
                 }
                 Instruction::JumpIfFalse(first, second) => {
@@ -106,16 +123,19 @@ impl Machine {
                         return Err(self.runtime_error("Bug: empty stack on 'JumpIfFalse'"));
                     };
                     if !condition {
-                        self.ip += jump;
+                        self.frame_mut()?.ip_inc(jump);
+                        // self.ip += jump;
                     }
                 }
                 Instruction::Jump(first, second) => {
                     let jump = bytes_to_jump(first, second);
-                    self.ip += jump;
+                    // self.ip += jump;
+                    self.frame_mut()?.ip_inc(jump);
                 }
                 Instruction::Loop(first, second) => {
                     let jump = bytes_to_jump(first, second);
-                    self.ip -= jump;
+                    // self.ip -= jump;
+                    self.frame_mut()?.ip_dec(jump);
                 }
                 Instruction::Duplicate => {
                     let Some(value) = self.stack_peek().clone() else {
@@ -182,7 +202,7 @@ impl Machine {
     }
 
     fn read_const(&self, index: u8) -> MachineResult<Value> {
-        let Some(value) = self.chunk.read_const(index) else {
+        let Some(value) = self.chunk()?.read_const(index) else {
             return Err(self.runtime_error("Invalid constant index"));
         };
         Ok(value)
@@ -190,6 +210,7 @@ impl Machine {
 
     fn stack_reset(&mut self) {
         self.stack.clear();
+        self.frames.clear();
     }
 
     fn stack_push(&mut self, value: Value) -> MachineResult<()> {
@@ -211,9 +232,53 @@ impl Machine {
         Ok(value)
     }
 
+    fn call(&mut self, func_ref: Rc<Func>, arg_count: usize) {
+        let frame = CallFrame {
+            func_ref,
+            ip: 0,
+            frame_start: self.stack.len() - arg_count - 1,
+        };
+        self.frames.push(frame);
+    }
+
+    fn fetch_instruction(&mut self) -> FetchResult<Instruction> {
+        let frame = self
+            .frame_mut()
+            .map_err(|err| FetchError::Other(err.text))?;
+        frame.func_ref.chunk().fetch(&mut frame.ip)
+    }
+
+    fn frame(&self) -> MachineResult<&CallFrame> {
+        let Some(f) = self.frames.last() else {
+            return Err(MachineError::with_str("Bug: empty call frame"));
+        };
+        Ok(f)
+    }
+
+    fn chunk(&self) -> MachineResult<&Chunk> {
+        Ok(&self.frame()?.func_ref.chunk())
+    }
+
+    fn frame_mut(&mut self) -> MachineResult<&mut CallFrame> {
+        let Some(f) = self.frames.last_mut() else {
+            return Err(MachineError::with_str("Bug: empty call frame"));
+        };
+        return Ok(f);
+    }
+
+    fn relative_to_absolute_slot(&self, relative_slot: u8) -> MachineResult<usize> {
+        let start = self.frame()?.frame_start;
+        Ok(start + relative_slot as usize)
+    }
+
     fn runtime_error<T: AsRef<str>>(&self, message: T) -> MachineError {
-        let idx = self.ip - 1;
-        let line_number = self.chunk.line_number(idx);
+        let mut line_number: Option<usize> = None;
+        if let Ok(frame) = self.frame()
+            && let Ok(chunk) = self.chunk()
+        {
+            let idx = frame.ip - 1;
+            line_number = chunk.line_number(idx);
+        }
         MachineError {
             text: message.as_ref().to_string(),
             line_number,
@@ -498,7 +563,8 @@ mod test {
         let probe = probe_ref.borrow();
         probe.assert_output_match(buffer_out);
 
-        assert!(machine.stack.is_empty());
+        // TODO: maybe drop this check
+        assert_eq!(machine.stack.len(), 1);
         Ok(())
     }
 }
