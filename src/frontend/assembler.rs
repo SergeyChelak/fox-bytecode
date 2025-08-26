@@ -36,24 +36,19 @@ impl Assembler {
         }
     }
 
-    pub fn compile(mut self) -> Result<Compiler, Vec<ErrorInfo>> {
+    pub fn compile(mut self) -> Result<Func, Vec<ErrorInfo>> {
         self.init_compiler(FuncType::Script);
         self.advance();
         while !self.is_match(TokenType::Eof) {
             self.declaration();
         }
-        self.end_compiler();
+        let func = self.end_compiler();
 
         if !self.errors.is_empty() {
             return Err(self.errors);
         }
 
-        if let Some(compiler) = self.compiler {
-            return Ok(*compiler);
-        }
-
-        self.error("Compiler is None after 'compile'");
-        Err(self.errors)
+        Ok(func)
     }
 
     fn advance(&mut self) {
@@ -125,11 +120,7 @@ impl Assembler {
         self.error_at_current(message.as_ref());
     }
 
-    fn end_compiler(&mut self) {
-        self.emit_return();
-    }
-
-    fn _end_compiler(&mut self) -> Func {
+    fn end_compiler(&mut self) -> Func {
         self.emit_return();
         let Some(mut compiler) = self.compiler.take() else {
             panic!("Can't end compiler which is None")
@@ -162,7 +153,7 @@ impl Assembler {
         self.consume(TokenType::LeftBrace, "Expect '{' before function body");
         self.block();
 
-        let func = self._end_compiler();
+        let func = self.end_compiler();
         self.emit_constant(Value::Fun(Rc::new(func)));
     }
 }
