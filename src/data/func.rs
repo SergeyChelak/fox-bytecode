@@ -2,7 +2,7 @@ use std::fmt::Display;
 
 use crate::Chunk;
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct Func {
     arity: usize,
     chunk: Chunk,
@@ -32,4 +32,19 @@ impl Display for Func {
 pub enum FuncType {
     Script,
     Function,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    impl Func {
+        pub fn any_with_chunk(chunk: Chunk) -> Self {
+            Self {
+                arity: 0,
+                chunk,
+                name: None,
+            }
+        }
+    }
 }

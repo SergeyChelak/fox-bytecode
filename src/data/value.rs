@@ -1,18 +1,33 @@
 use std::{fmt::Display, num::ParseFloatError, rc::Rc};
 
+use crate::Func;
+
 pub type Double = f32;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub enum Value {
     Nil,
     Number(Double),
     Bool(bool),
     Text(Rc<String>),
+    Fun(Rc<Func>),
 }
 
 impl Default for Value {
     fn default() -> Self {
         Self::Nil
+    }
+}
+impl PartialEq for Value {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Nil, Self::Nil) => true,
+            (Self::Number(l), Self::Number(r)) => l == r,
+            (Self::Bool(l), Self::Bool(r)) => l == r,
+            (Self::Text(l), Self::Text(r)) => l == r,
+            (Self::Fun(l), Self::Fun(r)) => Rc::ptr_eq(l, r),
+            _ => false,
+        }
     }
 }
 
@@ -23,6 +38,7 @@ impl Display for Value {
             Value::Bool(val) => write!(f, "{val}"),
             Value::Number(val) => write!(f, "{val}"),
             Value::Text(val) => write!(f, "{val}"),
+            Value::Fun(val) => write!(f, "{val}"),
         }
     }
 }

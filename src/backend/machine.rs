@@ -5,6 +5,12 @@ use crate::{MachineError, MachineResult, backend::MachineIO, data::*, utils::byt
 const FRAMES_MAX: usize = 64;
 const STACK_MAX_SIZE: usize = FRAMES_MAX * UINT8_COUNT;
 
+// struct CallFrame {
+//     func: Rc<Func>,
+//     ip: usize,
+//     frame_start: usize,
+// }
+
 pub struct Machine {
     chunk: Chunk,
     ip: usize,
@@ -14,9 +20,9 @@ pub struct Machine {
 }
 
 impl Machine {
-    pub fn with(chunk: Chunk, io: Rc<RefCell<dyn MachineIO>>) -> Self {
+    pub fn with(func: Func, io: Rc<RefCell<dyn MachineIO>>) -> Self {
         Self {
-            chunk,
+            chunk: func.chunk().clone(),
             ip: 0,
             stack: Vec::<Value>::with_capacity(STACK_MAX_SIZE),
             globals: HashMap::new(),
@@ -448,7 +454,8 @@ mod test {
         chunk.add_constant(Value::number(2.0));
         let idx = chunk.add_constant(Value::number(10.0));
         chunk.write_u8(idx as u8, 1);
-        let mut machine = Machine::with(chunk, Rc::new(RefCell::new(DummyIO)));
+        let func = Func::any_with_chunk(chunk);
+        let mut machine = Machine::with(func, Rc::new(RefCell::new(DummyIO)));
         machine.run()?;
         assert_eq!(machine.stack_pop().unwrap().as_number(), Some(10.0));
         Ok(())
@@ -477,7 +484,8 @@ mod test {
         buffer_out: &[String],
     ) -> MachineResult<()> {
         let probe_ref = Rc::new(RefCell::new(Probe::new()));
-        let mut machine = Machine::with(chunk, probe_ref.clone());
+        let func = Func::any_with_chunk(chunk);
+        let mut machine = Machine::with(func, probe_ref.clone());
         for v_in in stack_in {
             machine.stack_push(v_in.clone())?;
         }
