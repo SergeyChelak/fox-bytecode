@@ -8,7 +8,7 @@ use crate::{
         rule::Precedence,
         scanner::TokenSource,
     },
-    utils::jump_to_bytes,
+    utils::word_to_bytes,
 };
 
 type ParseRule = super::rule::ParseRule<Assembler>;
@@ -722,7 +722,7 @@ impl Assembler {
         if offset > u16::MAX as usize {
             self.error("Jump size is too large");
         }
-        let (f, s) = jump_to_bytes(offset);
+        let (f, s) = word_to_bytes(offset);
         self.emit_instruction(&Instruction::Loop(f, s));
     }
 
@@ -733,7 +733,7 @@ impl Assembler {
         if jump > u16::MAX as usize {
             self.error("Too much code to jump over");
         }
-        let (first, second) = jump_to_bytes(jump);
+        let (first, second) = word_to_bytes(jump);
         let instr = match fetch_result {
             Ok(Instruction::JumpIfFalse(_, _)) => Instruction::JumpIfFalse(first, second),
             Ok(Instruction::Jump(_, _)) => Instruction::Jump(first, second),

@@ -1,6 +1,6 @@
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
-use crate::{MachineError, MachineResult, backend::MachineIO, data::*, utils::bytes_to_jump};
+use crate::{MachineError, MachineResult, backend::MachineIO, data::*, utils::bytes_to_word};
 
 const FRAMES_MAX: usize = 64;
 const STACK_MAX_SIZE: usize = FRAMES_MAX * UINT8_COUNT;
@@ -111,36 +111,27 @@ impl Machine {
                     self.stack_push(value)?
                 }
                 Instruction::SetLocal(rel_slot) => {
-                    let Some(value) = self.stack_peek() else {
-                        return Err(self.runtime_error("Bug: empty stack on 'SetLocal'"));
-                    };
+                    let value = self.stack_peek()?;
                     let slot = self.relative_to_absolute_slot(rel_slot)?;
                     self.stack[slot as usize] = value;
                 }
                 Instruction::JumpIfFalse(first, second) => {
-                    let jump = bytes_to_jump(first, second);
-                    let Some(condition) = self.stack_peek().map(|val| val.as_bool()) else {
-                        return Err(self.runtime_error("Bug: empty stack on 'JumpIfFalse'"));
-                    };
+                    let jump = bytes_to_word(first, second);
+                    let condition = self.stack_peek()?.as_bool();
                     if !condition {
                         self.frame_mut()?.ip_inc(jump);
-                        // self.ip += jump;
                     }
                 }
                 Instruction::Jump(first, second) => {
-                    let jump = bytes_to_jump(first, second);
-                    // self.ip += jump;
+                    let jump = bytes_to_word(first, second);
                     self.frame_mut()?.ip_inc(jump);
                 }
                 Instruction::Loop(first, second) => {
-                    let jump = bytes_to_jump(first, second);
-                    // self.ip -= jump;
+                    let jump = bytes_to_word(first, second);
                     self.frame_mut()?.ip_dec(jump);
                 }
                 Instruction::Duplicate => {
-                    let Some(value) = self.stack_peek().clone() else {
-                        return Err(self.runtime_error("Bug: empty stack on 'Duplicate' call"));
-                    };
+                    let value = self.stack_peek()?;
                     self.stack_push(value)?;
                 }
                 Instruction::Call(_args_count) => todo!(),
@@ -171,10 +162,7 @@ impl Machine {
             let message = format!("Undefined variable {}", name);
             return Err(self.runtime_error(&message));
         }
-        let Some(value) = self.stack_peek() else {
-            let message = format!("Bug: not value for '{}' variable", name);
-            return Err(self.runtime_error(&message));
-        };
+        let value = self.stack_peek()?;
         self.globals.insert(name, value);
         Ok(())
     }
@@ -222,8 +210,23 @@ impl Machine {
         Ok(())
     }
 
-    fn stack_peek(&mut self) -> Option<Value> {
-        self.stack.last().cloned()
+    fn stack_peek(&self) -> MachineResult<Value> {
+        self.stack_peek_at(0)
+    }
+
+    fn stack_peek_at(&self, rev_index: usize) -> MachineResult<Value> {
+        let len = self.stack.len();
+        let err = || {
+            let msg = format!("Bug: trying access stack with invalid index {rev_index}");
+            return Err(MachineError::with_str(msg.as_str()));
+        };
+        if rev_index >= len {
+            return err();
+        }
+        let Some(value) = self.stack.get(len - rev_index - 1).cloned() else {
+            return err();
+        };
+        Ok(value)
     }
 
     fn stack_pop(&mut self) -> MachineResult<Value> {
@@ -511,6 +514,26 @@ mod test {
             &[],
             &["abc".to_string()],
         )
+    }
+
+    #[test]
+    fn peek_test() -> MachineResult<()> {
+        let chunk = Chunk::new();
+        let func = Func::any_with_chunk(chunk);
+        let mut vm = Machine::with(func, Rc::new(RefCell::new(DummyIO)));
+        let a = Value::Number(1.0);
+        let b = Value::Number(2.0);
+        let c = Value::Number(3.0);
+        vm.stack_push(a.clone())?;
+        vm.stack_push(b.clone())?;
+        vm.stack_push(c.clone())?;
+        // random picks
+        assert_eq!(vm.stack_peek_at(2)?, a);
+        assert_eq!(vm.stack_peek()?, c);
+        assert_eq!(vm.stack_peek_at(1)?, b);
+        // main function pushed at zero position, peek at index 4 for error
+        assert!(vm.stack_peek_at(4).is_err());
+        Ok(())
     }
 
     #[test]
