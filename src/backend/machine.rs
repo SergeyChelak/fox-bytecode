@@ -33,7 +33,7 @@ impl Machine {
         let mut vm = Self::new(io);
         let func_ref = Rc::new(func);
         _ = vm.stack_push(Value::Fun(func_ref.clone()));
-        vm.call(func_ref, 0);
+        vm.unchecked_call(func_ref, 0);
         vm
     }
 
@@ -154,7 +154,7 @@ impl Machine {
         let name = self.read_const_string(index)?;
         let Some(value) = self.globals.get(&name).cloned() else {
             let message = format!("Undefined variable {}", name);
-            return Err(self.runtime_error(&message));
+            return Err(self.runtime_error(message));
         };
         self.stack_push(value)
     }
@@ -163,7 +163,7 @@ impl Machine {
         let name = self.read_const_string(index)?;
         if !self.globals.contains_key(&name) {
             let message = format!("Undefined variable {}", name);
-            return Err(self.runtime_error(&message));
+            return Err(self.runtime_error(message));
         }
         let value = self.stack_peek()?;
         self.globals.insert(name, value);
@@ -241,15 +241,27 @@ impl Machine {
 
     fn call_value(&mut self, value: Value, arg_count: usize) -> MachineResult<()> {
         match value {
-            Value::Fun(callee) => {
-                self.call(callee, arg_count);
-                Ok(())
-            }
+            Value::Fun(callee) => self.call(callee, arg_count),
             _ => Err(self.runtime_error("Can only call functions and classes")),
         }
     }
 
-    fn call(&mut self, func_ref: Rc<Func>, arg_count: usize) {
+    fn call(&mut self, func_ref: Rc<Func>, arg_count: usize) -> MachineResult<()> {
+        if arg_count != func_ref.arity {
+            let message = format!(
+                "Expected {} arguments but got {}",
+                func_ref.arity, arg_count
+            );
+            return Err(self.runtime_error(message));
+        }
+        if self.frames.len() == FRAMES_MAX {
+            return Err(self.runtime_error("Stack overflow"));
+        }
+        self.unchecked_call(func_ref, arg_count);
+        Ok(())
+    }
+
+    fn unchecked_call(&mut self, func_ref: Rc<Func>, arg_count: usize) {
         let frame = CallFrame {
             func_ref,
             ip: 0,
