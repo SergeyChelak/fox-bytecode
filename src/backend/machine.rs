@@ -48,9 +48,8 @@ impl Machine {
 
     pub fn run(&mut self) -> MachineResult<()> {
         let result = self.perform();
-        if let Err(err) = &result {
+        if result.is_err() {
             self.stack_reset();
-            self.io.borrow_mut().set_vm_error(err.clone());
         }
         result
     }
@@ -134,7 +133,11 @@ impl Machine {
                     let value = self.stack_peek()?;
                     self.stack_push(value)?;
                 }
-                Instruction::Call(_args_count) => todo!(),
+                Instruction::Call(arg_count) => {
+                    let arg_count = arg_count as usize;
+                    let value = self.stack_peek_at(arg_count)?;
+                    self.call_value(value, arg_count)?;
+                }
             }
         }
         Ok(())
@@ -234,6 +237,16 @@ impl Machine {
             return Err(self.runtime_error("Pop on empty stack"));
         };
         Ok(value)
+    }
+
+    fn call_value(&mut self, value: Value, arg_count: usize) -> MachineResult<()> {
+        match value {
+            Value::Fun(callee) => {
+                self.call(callee, arg_count);
+                Ok(())
+            }
+            _ => Err(self.runtime_error("Can only call functions and classes")),
+        }
     }
 
     fn call(&mut self, func_ref: Rc<Func>, arg_count: usize) {

@@ -15,3 +15,16 @@ fn func_declaration_test() {
     assert_eq!(None, probe.borrow().top_error_message());
     probe.borrow().assert_output_match(output);
 }
+
+#[test]
+fn not_function_call_test() {
+    let src = r#"
+        var notAFunction = 123;
+        notAFunction();
+    "#;
+    let probe = interpret_using_probe(src);
+    assert_eq!(
+        Some("Can only call functions and classes"),
+        probe.borrow().top_error_message()
+    );
+}

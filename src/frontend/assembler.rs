@@ -210,7 +210,7 @@ impl Assembler {
         use TokenType::*;
         match t_type {
             LeftParenthesis => {
-                ParseRule::new(Some(Self::grouping), Some(Self::call), Precedence::None)
+                ParseRule::new(Some(Self::grouping), Some(Self::call), Precedence::Call)
             }
             Minus => ParseRule::new(Some(Self::unary), Some(Self::binary), Precedence::Term),
             Plus => ParseRule::new(None, Some(Self::binary), Precedence::Term),
