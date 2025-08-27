@@ -25,6 +25,7 @@ pub const OPCODE_JUMP_IF_FALSE: u8 = 21;
 pub const OPCODE_JUMP: u8 = 22;
 pub const OPCODE_LOOP: u8 = 23;
 pub const OPCODE_DUPLICATE: u8 = 24;
+pub const OPCODE_CALL: u8 = 25;
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Instruction {
@@ -53,6 +54,7 @@ pub enum Instruction {
     Jump(u8, u8),
     Loop(u8, u8),
     Duplicate,
+    Call(u8),
 }
 
 impl Instruction {
@@ -114,6 +116,7 @@ impl Instruction {
             Instruction::Jump(f, s) => vec![OPCODE_JUMP, *f, *s],
             Instruction::Loop(f, s) => vec![OPCODE_LOOP, *f, *s],
             Instruction::Duplicate => vec![OPCODE_DUPLICATE],
+            Instruction::Call(args) => vec![OPCODE_CALL, *args],
         }
     }
 
@@ -184,6 +187,10 @@ impl Instruction {
                 Ok(Instruction::Loop(low, high))
             }
             OPCODE_DUPLICATE => Ok(Instruction::Duplicate),
+            OPCODE_CALL => {
+                let arg = consume(buffer, offset).ok_or(FetchError::Broken)?;
+                Ok(Instruction::Call(arg))
+            }
             x => Err(FetchError::Unknown(x)),
         }
     }
@@ -271,6 +278,16 @@ mod test {
             let instr = instr.unwrap();
             assert_eq!(&instr, exp);
         }
+    }
+
+    #[test]
+    fn call_instruction_parse() {
+        let inp = [OPCODE_CALL, 123];
+        let mut offset = 0;
+        let instr = Instruction::fetch(&inp, &mut offset);
+        assert!(instr.is_ok());
+        let instr = instr.unwrap();
+        assert_eq!(&instr, &Instruction::Call(123));
     }
 
     #[test]

@@ -143,6 +143,7 @@ impl Machine {
                     };
                     self.stack_push(value)?;
                 }
+                Instruction::Call(_args_count) => todo!(),
             }
         }
         Ok(())

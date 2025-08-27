@@ -209,7 +209,9 @@ impl Assembler {
     fn get_rule(&self, t_type: TokenType) -> ParseRule {
         use TokenType::*;
         match t_type {
-            LeftParenthesis => ParseRule::new(Some(Self::grouping), None, Precedence::None),
+            LeftParenthesis => {
+                ParseRule::new(Some(Self::grouping), Some(Self::call), Precedence::None)
+            }
             Minus => ParseRule::new(Some(Self::unary), Some(Self::binary), Precedence::Term),
             Plus => ParseRule::new(None, Some(Self::binary), Precedence::Term),
             Slash | Star => ParseRule::new(None, Some(Self::binary), Precedence::Factor),
@@ -235,6 +237,29 @@ impl Assembler {
         self.emit_instruction(&Instruction::Pop);
         self.parse_precedence(Precedence::And);
         self.patch_jump(end_jump);
+    }
+
+    fn call(&mut self, _can_assign: bool) {
+        let arg_count = self.argument_list() as u8;
+        self.emit_instruction(&Instruction::Call(arg_count));
+    }
+
+    fn argument_list(&mut self) -> usize {
+        let mut arg_count = 0;
+        if !self.check(TokenType::RightParenthesis) {
+            loop {
+                self.expression();
+                if arg_count == MAX_FUNCTION_ARGUMENTS {
+                    self.error("Can't have more than 255 arguments");
+                }
+                arg_count += 1;
+                if !self.is_match(TokenType::Comma) {
+                    break;
+                }
+            }
+        }
+        self.consume(TokenType::RightParenthesis, "Expect ')' after arguments");
+        arg_count
     }
 
     fn binary(&mut self, _can_assign: bool) {
