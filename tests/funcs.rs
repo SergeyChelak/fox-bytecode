@@ -90,3 +90,20 @@ fn fibonacci_recursion_test() {
     assert_eq!(None, probe.borrow().top_error_message());
     probe.borrow().assert_output_match(output);
 }
+
+#[test]
+fn func_implicit_return_test() {
+    let src = r#"
+        fun noReturn() {
+          print "Do stuff";
+          // implicit return nil here
+        }
+
+        print noReturn();
+        print "OK";
+    "#;
+    let probe = interpret_using_probe(src);
+    let output = &["Do stuff", "nil", "OK"];
+    assert_eq!(None, probe.borrow().top_error_message());
+    probe.borrow().assert_output_match(output);
+}
