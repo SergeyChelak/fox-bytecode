@@ -39,10 +39,33 @@ impl Display for MachineError {
 
 pub type MachineResult<T> = Result<T, MachineError>;
 
+pub struct StackTraceElement {
+    pub line: Option<usize>,
+    pub func_name: Option<String>,
+}
+
+impl Display for StackTraceElement {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let name = self
+            .func_name
+            .as_ref()
+            .map(|s| s.as_str())
+            .unwrap_or("script");
+        let line = self
+            .line
+            .as_ref()
+            .map(|s| format!("{s}"))
+            .unwrap_or("???".to_string());
+        write!(f, "[line {line}] in {name}")
+    }
+}
+
 pub trait MachineIO {
     fn push_output(&mut self, value: Value);
 
     fn set_vm_error(&mut self, error: MachineError);
+
+    fn set_stack_trace(&mut self, stack_trace: Vec<StackTraceElement>);
 
     fn set_scanner_errors(&mut self, errors: &[ErrorInfo]);
 }

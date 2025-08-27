@@ -18,8 +18,10 @@ pub fn interpret(code_ref: Rc<Vec<char>>, io: Rc<RefCell<dyn MachineIO>>) {
             let mut vm = Machine::with(chunk, io.clone());
             let result = vm.run();
 
-            if let Err(err) = result {
-                io.borrow_mut().set_vm_error(err);
+            if result.is_err() {
+                io.borrow_mut().push_output(Value::text_from_str(
+                    "Completed with errors. See messages above",
+                ));
             }
         }
         Err(arr) => {

@@ -50,4 +50,9 @@ impl MachineIO for SystemIO {
             eprintln!("{text}");
         }
     }
+
+    fn set_stack_trace(&mut self, stack_trace: Vec<StackTraceElement>) {
+        eprintln!("Trace:");
+        stack_trace.iter().for_each(|elem| eprintln!("> {elem}"));
+    }
 }

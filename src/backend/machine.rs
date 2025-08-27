@@ -1,6 +1,9 @@
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
-use crate::{MachineError, MachineResult, backend::MachineIO, data::*, utils::bytes_to_word};
+use crate::{
+    MachineError, MachineResult, StackTraceElement, backend::MachineIO, data::*,
+    utils::bytes_to_word,
+};
 
 const FRAMES_MAX: usize = 64;
 const STACK_MAX_SIZE: usize = FRAMES_MAX * UINT8_COUNT;
@@ -18,6 +21,10 @@ impl CallFrame {
 
     fn ip_dec(&mut self, val: usize) {
         self.ip -= val;
+    }
+
+    fn chunk(&self) -> &Chunk {
+        &self.func_ref.chunk()
     }
 }
 
@@ -48,7 +55,9 @@ impl Machine {
 
     pub fn run(&mut self) -> MachineResult<()> {
         let result = self.perform();
-        if result.is_err() {
+        if let Err(err) = &result {
+            self.io.borrow_mut().set_vm_error(err.clone());
+            self.flush_track_trace();
             self.stack_reset();
         }
         result
@@ -194,7 +203,7 @@ impl Machine {
     }
 
     fn read_const(&self, index: u8) -> MachineResult<Value> {
-        let Some(value) = self.chunk()?.read_const(index) else {
+        let Some(value) = self.frame()?.chunk().read_const(index) else {
             return Err(self.runtime_error("Invalid constant index"));
         };
         Ok(value)
@@ -284,10 +293,6 @@ impl Machine {
         Ok(f)
     }
 
-    fn chunk(&self) -> MachineResult<&Chunk> {
-        Ok(&self.frame()?.func_ref.chunk())
-    }
-
     fn frame_mut(&mut self) -> MachineResult<&mut CallFrame> {
         let Some(f) = self.frames.last_mut() else {
             return Err(MachineError::with_str("Bug: empty call frame"));
@@ -302,16 +307,27 @@ impl Machine {
 
     fn runtime_error<T: AsRef<str>>(&self, message: T) -> MachineError {
         let mut line_number: Option<usize> = None;
-        if let Ok(frame) = self.frame()
-            && let Ok(chunk) = self.chunk()
-        {
+        if let Ok(frame) = self.frame() {
             let idx = frame.ip - 1;
-            line_number = chunk.line_number(idx);
+            line_number = frame.chunk().line_number(idx);
         }
         MachineError {
             text: message.as_ref().to_string(),
             line_number,
         }
+    }
+
+    fn flush_track_trace(&mut self) {
+        let stack_trace = self
+            .frames
+            .iter()
+            .rev()
+            .map(|frame| StackTraceElement {
+                line: frame.chunk().line_number(frame.ip),
+                func_name: frame.func_ref.name.clone(),
+            })
+            .collect::<Vec<_>>();
+        self.io.borrow_mut().set_stack_trace(stack_trace);
     }
 }
 
@@ -587,6 +603,10 @@ mod test {
         }
 
         fn set_scanner_errors(&mut self, _errors: &[ErrorInfo]) {
+            // no op
+        }
+
+        fn set_stack_trace(&mut self, _stack_trace: Vec<StackTraceElement>) {
             // no op
         }
     }

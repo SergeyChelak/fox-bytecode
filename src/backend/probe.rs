@@ -1,10 +1,11 @@
-use crate::{ErrorInfo, MachineError, MachineIO, data::Value};
+use crate::{ErrorInfo, MachineError, MachineIO, StackTraceElement, data::Value};
 
 #[derive(Default)]
 pub struct Probe {
     output_buffer: Vec<String>,
     vm_error: Option<MachineError>,
     scanner_errors: Vec<ErrorInfo>,
+    stack_trace: Option<Vec<StackTraceElement>>,
 }
 
 impl Probe {
@@ -32,6 +33,18 @@ impl Probe {
         }
         None
     }
+
+    pub fn stack_trace_text(&self) -> Option<String> {
+        let Some(trace) = &self.stack_trace else {
+            return None;
+        };
+        let val = trace
+            .iter()
+            .map(|elem| format!("{elem}"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        Some(val)
+    }
 }
 
 impl MachineIO for Probe {
@@ -45,5 +58,9 @@ impl MachineIO for Probe {
 
     fn set_scanner_errors(&mut self, errors: &[ErrorInfo]) {
         self.scanner_errors = errors.to_vec();
+    }
+
+    fn set_stack_trace(&mut self, stack_trace: Vec<StackTraceElement>) {
+        self.stack_trace = Some(stack_trace);
     }
 }
