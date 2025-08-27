@@ -444,6 +444,10 @@ impl Assembler {
             self.if_statement();
             return;
         }
+        if self.is_match(TokenType::Return) {
+            self.return_statement();
+            return;
+        }
         if self.is_match(TokenType::Switch) {
             self.switch_statement();
             return;
@@ -679,6 +683,20 @@ impl Assembler {
         self.consume(TokenType::Semicolon, "Expect ';' after value");
         self.emit_instruction(&Instruction::Print);
     }
+
+    fn return_statement(&mut self) {
+        if matches!(self.compiler().func_type(), FuncType::Script) {
+            self.error("Can't return from top-level code");
+        }
+
+        if self.is_match(TokenType::Semicolon) {
+            self.emit_return();
+        } else {
+            self.expression();
+            self.consume(TokenType::Semicolon, "Expect ';' after return value");
+            self.emit_instruction(&Instruction::Return);
+        }
+    }
 }
 
 /// Emit functions
@@ -700,6 +718,7 @@ impl Assembler {
     }
 
     fn emit_return(&mut self) -> usize {
+        self.emit_instruction(&Instruction::Nil);
         self.emit_instruction(&Instruction::Return)
     }
 
@@ -780,7 +799,7 @@ impl Assembler {
     // Actually isn't great solution but it looks a critical issue if compiler is None
     // so no reason to continue execution and panic is acceptable behavior.
     // Will redesign by propagating result to each Assembler's function
-    fn compiler(&self) -> &Box<Compiler> {
+    fn compiler(&self) -> &Compiler {
         self.compiler.as_ref().expect("Bug: compiler can't be None")
     }
 

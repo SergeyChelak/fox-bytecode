@@ -46,11 +46,7 @@ pub struct StackTraceElement {
 
 impl Display for StackTraceElement {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let name = self
-            .func_name
-            .as_ref()
-            .map(|s| s.as_str())
-            .unwrap_or("script");
+        let name = self.func_name.as_deref().unwrap_or("script");
         let line = self
             .line
             .as_ref()

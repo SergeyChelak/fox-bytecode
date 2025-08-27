@@ -24,6 +24,10 @@ impl Compiler {
     pub fn assign_name(&mut self, name: &str) {
         self.func.name = Some(name.to_string());
     }
+
+    pub fn func_type(&self) -> &FuncType {
+        &self.func_type
+    }
 }
 
 /// Shorthands

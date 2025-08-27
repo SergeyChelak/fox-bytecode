@@ -24,7 +24,7 @@ impl CallFrame {
     }
 
     fn chunk(&self) -> &Chunk {
-        &self.func_ref.chunk()
+        self.func_ref.chunk()
     }
 }
 
@@ -102,7 +102,18 @@ impl Machine {
                     self.io.borrow_mut().push_output(value);
                 }
                 Instruction::Return => {
-                    break 'run_loop;
+                    let result = self.stack_pop()?;
+                    let Some(frame) = self.frames.pop() else {
+                        return Err(MachineError::with_str("Bug: return on empty call frame"));
+                    };
+
+                    if self.frames.is_empty() {
+                        self.stack_pop()?;
+                        break 'run_loop;
+                    }
+
+                    self.stack.truncate(frame.frame_start);
+                    self.stack_push(result)?;
                 }
                 Instruction::Pop => {
                     self.stack_pop()?;
@@ -112,7 +123,7 @@ impl Machine {
                 Instruction::SetGlobal(index) => self.set_global(index)?,
                 Instruction::GetLocal(rel_slot) => {
                     let slot = self.relative_to_absolute_slot(rel_slot)?;
-                    let Some(value) = self.stack.get(slot as usize).cloned() else {
+                    let Some(value) = self.stack.get(slot).cloned() else {
                         let msg = format!("Bug: failed to get local value with '{:?}'", instr);
                         return Err(self.runtime_error(msg));
                     };
@@ -121,7 +132,7 @@ impl Machine {
                 Instruction::SetLocal(rel_slot) => {
                     let value = self.stack_peek()?;
                     let slot = self.relative_to_absolute_slot(rel_slot)?;
-                    self.stack[slot as usize] = value;
+                    self.stack[slot] = value;
                 }
                 Instruction::JumpIfFalse(first, second) => {
                     let jump = bytes_to_word(first, second);
@@ -230,7 +241,7 @@ impl Machine {
         let len = self.stack.len();
         let err = || {
             let msg = format!("Bug: trying access stack with invalid index {rev_index}");
-            return Err(MachineError::with_str(msg.as_str()));
+            Err(MachineError::with_str(msg.as_str()))
         };
         if rev_index >= len {
             return err();
@@ -271,10 +282,11 @@ impl Machine {
     }
 
     fn unchecked_call(&mut self, func_ref: Rc<Func>, arg_count: usize) {
+        let frame_start = self.stack.len() - arg_count - 1;
         let frame = CallFrame {
             func_ref,
             ip: 0,
-            frame_start: self.stack.len() - arg_count - 1,
+            frame_start,
         };
         self.frames.push(frame);
     }
@@ -297,7 +309,7 @@ impl Machine {
         let Some(f) = self.frames.last_mut() else {
             return Err(MachineError::with_str("Bug: empty call frame"));
         };
-        return Ok(f);
+        Ok(f)
     }
 
     fn relative_to_absolute_slot(&self, relative_slot: u8) -> MachineResult<usize> {
