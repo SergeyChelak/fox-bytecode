@@ -4,6 +4,7 @@ mod probe;
 pub use probe::*;
 mod machine;
 pub use machine::Machine;
+mod native;
 
 use crate::{data::Value, errors::ErrorInfo};
 

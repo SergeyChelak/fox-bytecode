@@ -1,6 +1,6 @@
 use std::{fmt::Display, num::ParseFloatError, rc::Rc};
 
-use crate::Func;
+use crate::{Func, NativeFn, NativeFunc};
 
 pub type Double = f32;
 
@@ -11,6 +11,7 @@ pub enum Value {
     Bool(bool),
     Text(Rc<String>),
     Fun(Rc<Func>),
+    NativeFun(Rc<NativeFunc>),
 }
 
 impl Default for Value {
@@ -26,6 +27,7 @@ impl PartialEq for Value {
             (Self::Bool(l), Self::Bool(r)) => l == r,
             (Self::Text(l), Self::Text(r)) => l == r,
             (Self::Fun(l), Self::Fun(r)) => Rc::ptr_eq(l, r),
+            (Self::NativeFun(l), Self::NativeFun(r)) => Rc::ptr_eq(l, r),
             _ => false,
         }
     }
@@ -39,11 +41,16 @@ impl Display for Value {
             Value::Number(val) => write!(f, "{val}"),
             Value::Text(val) => write!(f, "{val}"),
             Value::Fun(val) => write!(f, "{val}"),
+            Value::NativeFun(val) => write!(f, "{val}"),
         }
     }
 }
 
 impl Value {
+    pub fn native_func(func: NativeFn) -> Self {
+        Value::NativeFun(Rc::new(NativeFunc::with(func)))
+    }
+
     pub fn text_from_str(value: &str) -> Self {
         Self::Text(Rc::new(value.to_string()))
     }

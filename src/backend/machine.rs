@@ -38,6 +38,7 @@ pub struct Machine {
 impl Machine {
     pub fn with(func: Func, io: Rc<RefCell<dyn MachineIO>>) -> Self {
         let mut vm = Self::new(io);
+        vm.define_native("list", super::native::native_list);
         let func_ref = Rc::new(func);
         _ = vm.stack_push(Value::Fun(func_ref.clone()));
         vm.unchecked_call(func_ref, 0);
@@ -262,6 +263,7 @@ impl Machine {
     fn call_value(&mut self, value: Value, arg_count: usize) -> MachineResult<()> {
         match value {
             Value::Fun(callee) => self.call(callee, arg_count),
+            Value::NativeFun(callee) => self.call_native(callee, arg_count),
             _ => Err(self.runtime_error("Can only call functions and classes")),
         }
     }
@@ -279,6 +281,20 @@ impl Machine {
         }
         self.unchecked_call(func_ref, arg_count);
         Ok(())
+    }
+
+    fn call_native(&mut self, native_ref: Rc<NativeFunc>, arg_count: usize) -> MachineResult<()> {
+        let len = self.stack.len();
+        let args = &self.stack[len - arg_count..];
+        let result = native_ref.call(args);
+        self.stack.truncate(len - arg_count);
+        self.stack_push(result)
+    }
+
+    fn define_native<T: AsRef<str>>(&mut self, name: T, func: NativeFn) {
+        let value = Value::native_func(func);
+        self.globals
+            .insert(Rc::new(name.as_ref().to_string()), value);
     }
 
     fn unchecked_call(&mut self, func_ref: Rc<Func>, arg_count: usize) {

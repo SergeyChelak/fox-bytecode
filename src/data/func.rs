@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-use crate::Chunk;
+use crate::{Chunk, Value};
 
 #[derive(Default, Debug)]
 pub struct Func {
@@ -33,6 +33,29 @@ impl Display for Func {
 pub enum FuncType {
     Script,
     Function,
+}
+
+pub type NativeFn = fn(&[Value]) -> Value;
+
+#[derive(Debug)]
+pub struct NativeFunc {
+    func: NativeFn,
+}
+
+impl NativeFunc {
+    pub fn with(func: NativeFn) -> Self {
+        Self { func }
+    }
+
+    pub fn call(&self, args: &[Value]) -> Value {
+        (self.func)(args)
+    }
+}
+
+impl Display for NativeFunc {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "<native fn>")
+    }
 }
 
 #[cfg(test)]
