@@ -1,4 +1,4 @@
-use std::{cell::RefCell, process::exit, rc::Rc};
+use std::{process::exit, rc::Rc};
 
 use fox_bytecode::*;
 
@@ -17,42 +17,30 @@ fn run_file<T: AsRef<str>>(path: T) {
     };
     let code_ref = Rc::new(code);
     let formatter = ErrorFormatter::with(code_ref.clone());
-    let machine_io = SystemIO::new(formatter);
-    interpret(code_ref, Rc::new(RefCell::new(machine_io)));
+    let int_service = RuntimeInterpreterService::new(formatter);
+    let be_service = VirtualMachineService;
+    interpret(code_ref, shared(int_service), shared(be_service));
 }
 
 fn show_usage() {
     println!("Usage: fox-bytecode <script.fox>");
 }
 
-pub struct SystemIO {
+struct RuntimeInterpreterService {
     formatter: ErrorFormatter,
 }
 
-impl SystemIO {
+impl RuntimeInterpreterService {
     pub fn new(formatter: ErrorFormatter) -> Self {
         Self { formatter }
     }
 }
 
-impl MachineIO for SystemIO {
-    fn push_output(&mut self, value: Value) {
-        println!("{value}");
-    }
-
-    fn set_vm_error(&mut self, error: MachineError) {
-        eprintln!("Runtime error: {error}")
-    }
-
-    fn set_scanner_errors(&mut self, errors: &[ErrorInfo]) {
+impl InterpreterService for RuntimeInterpreterService {
+    fn set_compile_errors(&mut self, errors: &[ErrorInfo]) {
         for err in errors {
             let text = self.formatter.format_error(err);
             eprintln!("{text}");
         }
-    }
-
-    fn set_stack_trace(&mut self, stack_trace: Vec<StackTraceElement>) {
-        eprintln!("Trace:");
-        stack_trace.iter().for_each(|elem| eprintln!("> {elem}"));
     }
 }

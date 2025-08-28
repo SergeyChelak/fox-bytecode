@@ -107,3 +107,27 @@ fn func_implicit_return_test() {
     assert_eq!(None, probe.borrow().top_error_message());
     probe.borrow().assert_output_match(output);
 }
+
+#[test]
+fn stacktrace_test() {
+    let src = r#"
+        fun a() { b(); }
+        fun b() { c(); }
+        fun c() {
+          c("too", "many");
+        }
+
+        a();
+    "#;
+    let probe = interpret_using_probe(src);
+    assert_eq!(
+        Some("Expected 0 arguments but got 2"),
+        probe.borrow().top_error_message()
+    );
+
+    let stack_trace = probe.borrow().stack_trace_text();
+    assert_eq!(
+        Some("[line 5] in c\n[line 3] in b\n[line 2] in a\n[line 8] in script"),
+        stack_trace.as_deref()
+    );
+}

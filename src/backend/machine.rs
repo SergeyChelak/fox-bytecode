@@ -1,7 +1,9 @@
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use crate::{
-    MachineError, MachineResult, StackTraceElement, backend::MachineIO, data::*,
+    MachineError, MachineResult, Shared, StackTraceElement,
+    backend::{native::NativeFunctionsProvider, service::BackendService},
+    data::*,
     utils::bytes_to_word,
 };
 
@@ -32,32 +34,38 @@ pub struct Machine {
     frames: Vec<CallFrame>,
     stack: Vec<Value>,
     globals: HashMap<Rc<String>, Value>,
-    io: Rc<RefCell<dyn MachineIO>>,
+    service: Rc<RefCell<dyn BackendService>>,
 }
 
 impl Machine {
-    pub fn with(func: Func, io: Rc<RefCell<dyn MachineIO>>) -> Self {
-        let mut vm = Self::new(io);
-        vm.define_native("list", super::native::native_list);
+    pub fn with(
+        func: Func,
+        service: Shared<dyn BackendService>,
+        native: impl NativeFunctionsProvider,
+    ) -> Self {
+        let mut vm = Self::new(service);
+        native.get_functions().into_iter().for_each(|(name, func)| {
+            vm.define_native(name, func);
+        });
         let func_ref = Rc::new(func);
         _ = vm.stack_push(Value::Fun(func_ref.clone()));
         vm.unchecked_call(func_ref, 0);
         vm
     }
 
-    fn new(io: Rc<RefCell<dyn MachineIO>>) -> Self {
+    fn new(service: Shared<dyn BackendService>) -> Self {
         Self {
             frames: Vec::with_capacity(FRAMES_MAX),
             stack: Vec::with_capacity(STACK_MAX_SIZE),
             globals: HashMap::new(),
-            io,
+            service,
         }
     }
 
     pub fn run(&mut self) -> MachineResult<()> {
         let result = self.perform();
         if let Err(err) = &result {
-            self.io.borrow_mut().set_vm_error(err.clone());
+            self.service.borrow_mut().set_error(err.clone());
             self.flush_track_trace();
             self.stack_reset();
         }
@@ -100,7 +108,7 @@ impl Machine {
                 }
                 Instruction::Print => {
                     let value = self.stack_pop()?;
-                    self.io.borrow_mut().push_output(value);
+                    self.service.borrow_mut().print_value(value);
                 }
                 Instruction::Return => {
                     let result = self.stack_pop()?;
@@ -355,14 +363,17 @@ impl Machine {
                 func_name: frame.func_ref.name.clone(),
             })
             .collect::<Vec<_>>();
-        self.io.borrow_mut().set_stack_trace(stack_trace);
+        self.service.borrow_mut().set_stack_trace(stack_trace);
     }
 }
 
 #[cfg(test)]
-mod test {
+mod tests {
     use super::*;
-    use crate::backend::*;
+    use crate::{
+        backend::{service::probe::ProbeBackendService, *},
+        utils::{Shared, shared},
+    };
 
     #[test]
     fn operation_negate() -> MachineResult<()> {
@@ -589,7 +600,8 @@ mod test {
     fn peek_test() -> MachineResult<()> {
         let chunk = Chunk::new();
         let func = Func::any_with_chunk(chunk);
-        let mut vm = Machine::with(func, Rc::new(RefCell::new(DummyIO)));
+        let probe_ref = make_probe_ref();
+        let mut vm = Machine::with(func, probe_ref, EmptyNative);
         let a = Value::Number(1.0);
         let b = Value::Number(2.0);
         let c = Value::Number(3.0);
@@ -613,30 +625,11 @@ mod test {
         let idx = chunk.add_constant(Value::number(10.0));
         chunk.write_u8(idx as u8, 1);
         let func = Func::any_with_chunk(chunk);
-        let mut machine = Machine::with(func, Rc::new(RefCell::new(DummyIO)));
+        let probe_ref = make_probe_ref();
+        let mut machine = Machine::with(func, probe_ref, EmptyNative);
         machine.run()?;
         assert_eq!(machine.stack_pop().unwrap().as_number(), Some(10.0));
         Ok(())
-    }
-
-    struct DummyIO;
-
-    impl MachineIO for DummyIO {
-        fn push_output(&mut self, _value: Value) {
-            // no op
-        }
-
-        fn set_vm_error(&mut self, _error: MachineError) {
-            // no op
-        }
-
-        fn set_scanner_errors(&mut self, _errors: &[ErrorInfo]) {
-            // no op
-        }
-
-        fn set_stack_trace(&mut self, _stack_trace: Vec<StackTraceElement>) {
-            // no op
-        }
     }
 
     fn machine_test(
@@ -645,9 +638,9 @@ mod test {
         stack_out: &[Value],
         buffer_out: &[String],
     ) -> MachineResult<()> {
-        let probe_ref = Rc::new(RefCell::new(Probe::new()));
+        let probe_ref = make_probe_ref();
         let func = Func::any_with_chunk(chunk);
-        let mut machine = Machine::with(func, probe_ref.clone());
+        let mut machine = Machine::with(func, probe_ref.clone(), EmptyNative);
         for v_in in stack_in {
             machine.stack_push(v_in.clone())?;
         }
@@ -663,5 +656,18 @@ mod test {
         // TODO: maybe drop this check
         assert_eq!(machine.stack.len(), 1);
         Ok(())
+    }
+
+    fn make_probe_ref() -> Shared<ProbeBackendService> {
+        let probe_service = ProbeBackendService::default();
+        shared(probe_service)
+    }
+
+    struct EmptyNative;
+
+    impl NativeFunctionsProvider for EmptyNative {
+        fn get_functions(&self) -> Vec<(String, NativeFn)> {
+            Vec::new()
+        }
     }
 }

@@ -1,8 +1,11 @@
 extern crate fox_bytecode;
 
+mod probe;
+pub use probe::*;
+
 use std::{cell::RefCell, rc::Rc};
 
-use fox_bytecode::{Probe, interpret};
+use fox_bytecode::{interpret, shared};
 
 pub fn str_to_code_ref(input: &str) -> Rc<Vec<char>> {
     Rc::new(input.chars().collect())
@@ -10,8 +13,11 @@ pub fn str_to_code_ref(input: &str) -> Rc<Vec<char>> {
 
 pub fn interpret_using_probe(input: &str) -> Rc<RefCell<Probe>> {
     let code_ref = str_to_code_ref(input);
-    let machine_io = Probe::new();
-    let io_ref = Rc::new(RefCell::new(machine_io));
-    interpret(code_ref, io_ref.clone());
-    io_ref
+    let probe = Probe::default();
+    // HACK: Due unknown reasons,  the compiler doesn't see call of this function in funcs.rs
+    // I was managed to add this "fake" call to make it happy
+    assert!(probe.stack_trace_text().is_none());
+    let probe_shared = shared(probe);
+    interpret(code_ref, probe_shared.clone(), probe_shared.clone());
+    probe_shared
 }

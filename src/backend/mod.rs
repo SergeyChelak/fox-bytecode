@@ -1,12 +1,11 @@
 use std::fmt::Display;
 
-mod probe;
-pub use probe::*;
 mod machine;
 pub use machine::Machine;
 mod native;
-
-use crate::{data::Value, errors::ErrorInfo};
+mod service;
+pub use native::*;
+pub use service::*;
 
 #[derive(Debug, Clone)]
 pub struct MachineError {
@@ -55,14 +54,4 @@ impl Display for StackTraceElement {
             .unwrap_or("???".to_string());
         write!(f, "[line {line}] in {name}")
     }
-}
-
-pub trait MachineIO {
-    fn push_output(&mut self, value: Value);
-
-    fn set_vm_error(&mut self, error: MachineError);
-
-    fn set_stack_trace(&mut self, stack_trace: Vec<StackTraceElement>);
-
-    fn set_scanner_errors(&mut self, errors: &[ErrorInfo]);
 }
