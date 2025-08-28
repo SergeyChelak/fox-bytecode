@@ -1,8 +1,4 @@
-use crate::{NativeFn, Value};
-
-pub trait NativeFunctionsProvider {
-    fn get_functions(&self) -> Vec<(String, NativeFn)>;
-}
+use crate::{NativeFn, NativeFunctionsProvider, Value};
 
 pub struct ProductionNativeFunctions;
 

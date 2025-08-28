@@ -2,7 +2,7 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use crate::{
     MachineError, MachineResult, Shared, StackTraceElement,
-    backend::{native::NativeFunctionsProvider, service::BackendService},
+    backend::{NativeFunctionsProvider, service::BackendService},
     data::*,
     utils::bytes_to_word,
 };
@@ -368,7 +368,7 @@ impl Machine {
 }
 
 #[cfg(test)]
-mod tests {
+pub mod tests {
     use super::*;
     use crate::{
         backend::{service::probe::ProbeBackendService, *},
@@ -661,13 +661,5 @@ mod tests {
     fn make_probe_ref() -> Shared<ProbeBackendService> {
         let probe_service = ProbeBackendService::default();
         shared(probe_service)
-    }
-
-    struct EmptyNative;
-
-    impl NativeFunctionsProvider for EmptyNative {
-        fn get_functions(&self) -> Vec<(String, NativeFn)> {
-            Vec::new()
-        }
     }
 }

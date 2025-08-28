@@ -2,10 +2,22 @@ use std::fmt::Display;
 
 mod machine;
 pub use machine::Machine;
-mod native;
 mod service;
-pub use native::*;
 pub use service::*;
+
+use crate::NativeFn;
+
+pub trait NativeFunctionsProvider {
+    fn get_functions(&self) -> Vec<(String, NativeFn)>;
+}
+
+pub struct EmptyNative;
+
+impl NativeFunctionsProvider for EmptyNative {
+    fn get_functions(&self) -> Vec<(String, NativeFn)> {
+        Vec::new()
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct MachineError {

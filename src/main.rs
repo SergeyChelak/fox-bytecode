@@ -1,3 +1,6 @@
+mod native;
+use native::ProductionNativeFunctions;
+
 use std::{process::exit, rc::Rc};
 
 use fox_bytecode::*;
@@ -19,7 +22,12 @@ fn run_file<T: AsRef<str>>(path: T) {
     let formatter = ErrorFormatter::with(code_ref.clone());
     let int_service = RuntimeInterpreterService::new(formatter);
     let be_service = VirtualMachineService;
-    interpret(code_ref, shared(int_service), shared(be_service));
+    interpret(
+        code_ref,
+        shared(int_service),
+        shared(be_service),
+        ProductionNativeFunctions,
+    );
 }
 
 fn show_usage() {

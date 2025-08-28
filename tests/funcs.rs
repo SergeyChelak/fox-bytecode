@@ -1,4 +1,4 @@
-use crate::common::interpret_using_probe;
+use crate::common::{interpret_using_probe, interpret_with};
 mod common;
 
 #[test]
@@ -130,4 +130,40 @@ fn stacktrace_test() {
         Some("[line 5] in c\n[line 3] in b\n[line 2] in a\n[line 8] in script"),
         stack_trace.as_deref()
     );
+}
+
+#[test]
+fn native_function_call_test() {
+    let src = r#"
+        var val = sum(1, 2, 3, 4);
+        print val;
+        print "OK";
+    "#;
+    let probe = interpret_with(src, native_funcs::Provider);
+    let output = &["10", "OK"];
+    assert_eq!(None, probe.borrow().top_error_message());
+    probe.borrow().assert_output_match(output);
+}
+
+mod native_funcs {
+    use fox_bytecode::Value;
+
+    pub struct Provider;
+
+    impl fox_bytecode::NativeFunctionsProvider for Provider {
+        fn get_functions(&self) -> Vec<(String, fox_bytecode::NativeFn)> {
+            vec![("sum".to_string(), sum)]
+        }
+    }
+
+    fn sum(args: &[Value]) -> Value {
+        let mut acc = 0.0;
+        for x in args {
+            let Some(num) = x.as_number() else {
+                return Value::Nil;
+            };
+            acc += num;
+        }
+        Value::Number(acc)
+    }
 }

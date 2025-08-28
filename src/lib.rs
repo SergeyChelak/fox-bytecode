@@ -15,11 +15,11 @@ pub fn interpret(
     code_ref: Rc<Vec<char>>,
     interpreter_service: Shared<dyn InterpreterService>,
     backend_service: Shared<dyn BackendService>,
+    native_fn_provider: impl NativeFunctionsProvider,
 ) {
     let result = compile(code_ref.clone());
     match result {
         Ok(chunk) => {
-            let native_fn_provider = ProductionNativeFunctions;
             let mut vm = Machine::with(chunk, backend_service.clone(), native_fn_provider);
             let result = vm.run();
 
