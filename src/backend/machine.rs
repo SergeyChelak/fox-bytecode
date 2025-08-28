@@ -32,6 +32,10 @@ impl CallFrame {
     fn chunk(&self) -> &Chunk {
         self.func().chunk()
     }
+
+    fn line_number(&self) -> Option<usize> {
+        self.chunk().line_number(self.ip)
+    }
 }
 
 pub struct Machine {
@@ -181,6 +185,8 @@ impl Machine {
                     let closure = Value::closure(func.clone());
                     self.stack_push(closure)?;
                 }
+                Instruction::GetUpvalue(index) => todo!(),
+                Instruction::SetUpvalue(index) => todo!(),
             }
         }
         Ok(())
@@ -371,7 +377,7 @@ impl Machine {
             .iter()
             .rev()
             .map(|frame| StackTraceElement {
-                line: frame.chunk().line_number(frame.ip),
+                line: frame.line_number(),
                 func_name: frame.closure.func().name.clone(),
             })
             .collect::<Vec<_>>();

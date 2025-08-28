@@ -7,6 +7,7 @@ pub struct Compiler {
     func_type: FuncType,
     locals: Vec<Local>,
     depth: usize,
+    upvalues: [Upvalue; UINT8_COUNT],
     pub(crate) enclosing: Option<Box<Compiler>>,
 }
 
@@ -17,6 +18,7 @@ impl Compiler {
             func_type,
             locals: vec![Local::reserved()],
             depth: Default::default(),
+            upvalues: [Default::default(); UINT8_COUNT],
             enclosing,
         }
     }
@@ -145,6 +147,30 @@ impl Compiler {
         None
     }
 
+    pub fn resolve_upvalue(&mut self, token: &Token) -> Option<(u8, Option<&'static str>)> {
+        let Some(local) = self.enclosing.as_ref()?.resolve_local(token) else {
+            return None;
+        };
+        let (index, err) = self.update_value(local.index, true);
+        Some((index as u8, err))
+    }
+
+    fn update_value(&mut self, index: u8, is_local: bool) -> (usize, Option<&'static str>) {
+        let count = self.func.upvalue_count;
+        for (i, upvalue) in self.upvalues.iter().take(count).enumerate() {
+            if upvalue.index == index && upvalue.is_local == is_local {
+                return (i, None);
+            }
+        }
+        if count == UINT8_COUNT {
+            return (0, Some("Too many closure variables in function."));
+        }
+        self.upvalues[count] = Upvalue { index, is_local };
+        let result = count + 1;
+        self.func.upvalue_count = result;
+        (result, None)
+    }
+
     fn is_last_out_of_scope(&mut self) -> bool {
         let Some(depth) = self.locals.last().and_then(|local| local.depth) else {
             return false;
@@ -184,6 +210,12 @@ impl Local {
             depth: Some(0),
         }
     }
+}
+
+#[derive(Default, Clone, Copy)]
+struct Upvalue {
+    index: u8,
+    is_local: bool,
 }
 
 #[cfg(test)]

@@ -349,6 +349,14 @@ impl Assembler {
                 Instruction::GetLocal(info.index),
                 Instruction::SetLocal(info.index),
             )
+        } else if let Some((index, err)) = self.compiler_mut().resolve_upvalue(&token) {
+            if let Some(err) = err {
+                self.error(err);
+            }
+            (
+                Instruction::GetUpvalue(index),
+                Instruction::SetUpvalue(index),
+            )
         } else {
             let idx = self.identifier_constant(token);
             (Instruction::GetGlobal(idx), Instruction::SetGlobal(idx))

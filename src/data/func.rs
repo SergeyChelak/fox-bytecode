@@ -26,6 +26,7 @@ pub struct Func {
     pub(crate) arity: usize,
     chunk: Chunk,
     pub(crate) name: Option<String>,
+    pub(crate) upvalue_count: usize,
 }
 
 impl Func {
@@ -84,9 +85,8 @@ mod tests {
     impl Func {
         pub fn any_with_chunk(chunk: Chunk) -> Self {
             Self {
-                arity: 0,
                 chunk,
-                name: None,
+                ..Default::default()
             }
         }
     }

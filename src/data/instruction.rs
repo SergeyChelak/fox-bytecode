@@ -27,6 +27,8 @@ pub const OPCODE_LOOP: u8 = 23;
 pub const OPCODE_DUPLICATE: u8 = 24;
 pub const OPCODE_CALL: u8 = 25;
 pub const OPCODE_CLOSURE: u8 = 26;
+pub const OPCODE_GET_UPVALUE: u8 = 27;
+pub const OPCODE_SET_UPVALUE: u8 = 28;
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Instruction {
@@ -57,6 +59,8 @@ pub enum Instruction {
     Duplicate,
     Call(u8),
     Closure(u8),
+    GetUpvalue(u8),
+    SetUpvalue(u8),
 }
 
 impl Instruction {
@@ -120,6 +124,8 @@ impl Instruction {
             Instruction::Duplicate => vec![OPCODE_DUPLICATE],
             Instruction::Call(args) => vec![OPCODE_CALL, *args],
             Instruction::Closure(val) => vec![OPCODE_CLOSURE, *val],
+            Instruction::GetUpvalue(val) => vec![OPCODE_GET_UPVALUE, *val],
+            Instruction::SetUpvalue(val) => vec![OPCODE_SET_UPVALUE, *val],
         }
     }
 
@@ -198,6 +204,14 @@ impl Instruction {
                 let arg = consume(buffer, offset).ok_or(FetchError::Broken)?;
                 Ok(Instruction::Closure(arg))
             }
+            OPCODE_GET_UPVALUE => {
+                let arg = consume(buffer, offset).ok_or(FetchError::Broken)?;
+                Ok(Instruction::GetUpvalue(arg))
+            }
+            OPCODE_SET_UPVALUE => {
+                let arg = consume(buffer, offset).ok_or(FetchError::Broken)?;
+                Ok(Instruction::SetUpvalue(arg))
+            }
             x => Err(FetchError::Unknown(x)),
         }
     }
@@ -259,6 +273,8 @@ mod test {
             ([OPCODE_GET_LOCAL, 58], Instruction::GetLocal(58)),
             ([OPCODE_SET_LOCAL, 6], Instruction::SetLocal(6)),
             ([OPCODE_CLOSURE, 34], Instruction::Closure(34)),
+            ([OPCODE_GET_UPVALUE, 160], Instruction::GetUpvalue(160)),
+            ([OPCODE_SET_UPVALUE, 219], Instruction::SetUpvalue(219)),
         ];
         for (inp, exp) in data.iter() {
             let mut offset = 0;
