@@ -11,7 +11,7 @@ const FRAMES_MAX: usize = 64;
 const STACK_MAX_SIZE: usize = FRAMES_MAX * UINT8_COUNT;
 
 struct CallFrame {
-    func_ref: Rc<Func>,
+    closure: Rc<Closure>,
     ip: usize,
     frame_start: usize,
 }
@@ -25,8 +25,12 @@ impl CallFrame {
         self.ip -= val;
     }
 
+    fn func(&self) -> &Func {
+        self.closure.func()
+    }
+
     fn chunk(&self) -> &Chunk {
-        self.func_ref.chunk()
+        self.func().chunk()
     }
 }
 
@@ -39,7 +43,7 @@ pub struct Machine {
 
 impl Machine {
     pub fn with(
-        func: Func,
+        closure: Closure,
         service: Shared<dyn BackendService>,
         native: impl NativeFunctionsProvider,
     ) -> Self {
@@ -47,9 +51,9 @@ impl Machine {
         native.get_functions().into_iter().for_each(|(name, func)| {
             vm.define_native(name, func);
         });
-        let func_ref = Rc::new(func);
-        _ = vm.stack_push(Value::Fun(func_ref.clone()));
-        vm.unchecked_call(func_ref, 0);
+        let closure_ref = Rc::new(closure);
+        _ = vm.stack_push(Value::Closure(closure_ref.clone()));
+        vm.unchecked_call(closure_ref, 0);
         vm
     }
 
@@ -167,6 +171,16 @@ impl Machine {
                     let value = self.stack_peek_at(arg_count)?;
                     self.call_value(value, arg_count)?;
                 }
+                Instruction::Closure(index) => {
+                    let val = self.read_const(index)?;
+                    let Some(func) = &val.as_function() else {
+                        return Err(MachineError::with_str(
+                            "Bug: closure refers to non-function constant",
+                        ));
+                    };
+                    let closure = Value::closure(func.clone());
+                    self.stack_push(closure)?;
+                }
             }
         }
         Ok(())
@@ -270,24 +284,22 @@ impl Machine {
 
     fn call_value(&mut self, value: Value, arg_count: usize) -> MachineResult<()> {
         match value {
-            Value::Fun(callee) => self.call(callee, arg_count),
+            Value::Closure(callee) => self.call(callee, arg_count),
             Value::NativeFun(callee) => self.call_native(callee, arg_count),
             _ => Err(self.runtime_error("Can only call functions and classes")),
         }
     }
 
-    fn call(&mut self, func_ref: Rc<Func>, arg_count: usize) -> MachineResult<()> {
-        if arg_count != func_ref.arity {
-            let message = format!(
-                "Expected {} arguments but got {}",
-                func_ref.arity, arg_count
-            );
+    fn call(&mut self, closure: Rc<Closure>, arg_count: usize) -> MachineResult<()> {
+        let arity = closure.func().arity;
+        if arg_count != arity {
+            let message = format!("Expected {} arguments but got {}", arity, arg_count);
             return Err(self.runtime_error(message));
         }
         if self.frames.len() == FRAMES_MAX {
             return Err(self.runtime_error("Stack overflow"));
         }
-        self.unchecked_call(func_ref, arg_count);
+        self.unchecked_call(closure, arg_count);
         Ok(())
     }
 
@@ -305,10 +317,10 @@ impl Machine {
             .insert(Rc::new(name.as_ref().to_string()), value);
     }
 
-    fn unchecked_call(&mut self, func_ref: Rc<Func>, arg_count: usize) {
+    fn unchecked_call(&mut self, closure: Rc<Closure>, arg_count: usize) {
         let frame_start = self.stack.len() - arg_count - 1;
         let frame = CallFrame {
-            func_ref,
+            closure,
             ip: 0,
             frame_start,
         };
@@ -319,7 +331,7 @@ impl Machine {
         let frame = self
             .frame_mut()
             .map_err(|err| FetchError::Other(err.text))?;
-        frame.func_ref.chunk().fetch(&mut frame.ip)
+        frame.closure.func().chunk().fetch(&mut frame.ip)
     }
 
     fn frame(&self) -> MachineResult<&CallFrame> {
@@ -360,7 +372,7 @@ impl Machine {
             .rev()
             .map(|frame| StackTraceElement {
                 line: frame.chunk().line_number(frame.ip),
-                func_name: frame.func_ref.name.clone(),
+                func_name: frame.closure.func().name.clone(),
             })
             .collect::<Vec<_>>();
         self.service.borrow_mut().set_stack_trace(stack_trace);
@@ -599,9 +611,9 @@ pub mod tests {
     #[test]
     fn peek_test() -> MachineResult<()> {
         let chunk = Chunk::new();
-        let func = Func::any_with_chunk(chunk);
         let probe_ref = make_probe_ref();
-        let mut vm = Machine::with(func, probe_ref, EmptyNative);
+        let mut vm = make_machine(chunk, probe_ref);
+
         let a = Value::Number(1.0);
         let b = Value::Number(2.0);
         let c = Value::Number(3.0);
@@ -624,9 +636,7 @@ pub mod tests {
         chunk.add_constant(Value::number(2.0));
         let idx = chunk.add_constant(Value::number(10.0));
         chunk.write_u8(idx as u8, 1);
-        let func = Func::any_with_chunk(chunk);
-        let probe_ref = make_probe_ref();
-        let mut machine = Machine::with(func, probe_ref, EmptyNative);
+        let mut machine = make_machine(chunk, make_probe_ref());
         machine.run()?;
         assert_eq!(machine.stack_pop().unwrap().as_number(), Some(10.0));
         Ok(())
@@ -639,8 +649,7 @@ pub mod tests {
         buffer_out: &[String],
     ) -> MachineResult<()> {
         let probe_ref = make_probe_ref();
-        let func = Func::any_with_chunk(chunk);
-        let mut machine = Machine::with(func, probe_ref.clone(), EmptyNative);
+        let mut machine = make_machine(chunk, probe_ref.clone());
         for v_in in stack_in {
             machine.stack_push(v_in.clone())?;
         }
@@ -661,5 +670,11 @@ pub mod tests {
     fn make_probe_ref() -> Shared<ProbeBackendService> {
         let probe_service = ProbeBackendService::default();
         shared(probe_service)
+    }
+
+    fn make_machine(chunk: Chunk, backend: Shared<dyn BackendService>) -> Machine {
+        let func = Func::any_with_chunk(chunk);
+        let closure = Closure::with(func);
+        Machine::with(closure, backend, EmptyNative)
     }
 }

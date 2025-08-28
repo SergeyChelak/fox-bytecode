@@ -171,7 +171,8 @@ impl Assembler {
         self.block();
 
         let func = self.end_compiler();
-        self.emit_constant(Value::Fun(Rc::new(func)));
+        let idx = self.make_constant(Value::Fun(Rc::new(func)));
+        self.emit_instruction(&Instruction::Closure(idx));
     }
 }
 

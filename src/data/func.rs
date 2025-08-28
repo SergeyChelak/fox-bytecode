@@ -1,6 +1,25 @@
-use std::fmt::Display;
+use std::{fmt::Display, rc::Rc};
 
 use crate::{Chunk, Value};
+
+#[derive(Default, Debug)]
+pub struct Closure {
+    func: Rc<Func>,
+}
+
+impl Closure {
+    pub fn with(func: Func) -> Self {
+        Self::new(Rc::new(func))
+    }
+
+    pub fn new(func: Rc<Func>) -> Self {
+        Self { func }
+    }
+
+    pub fn func(&self) -> &Func {
+        &self.func
+    }
+}
 
 #[derive(Default, Debug)]
 pub struct Func {

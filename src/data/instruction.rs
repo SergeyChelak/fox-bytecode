@@ -26,6 +26,7 @@ pub const OPCODE_JUMP: u8 = 22;
 pub const OPCODE_LOOP: u8 = 23;
 pub const OPCODE_DUPLICATE: u8 = 24;
 pub const OPCODE_CALL: u8 = 25;
+pub const OPCODE_CLOSURE: u8 = 26;
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Instruction {
@@ -55,6 +56,7 @@ pub enum Instruction {
     Loop(u8, u8),
     Duplicate,
     Call(u8),
+    Closure(u8),
 }
 
 impl Instruction {
@@ -117,6 +119,7 @@ impl Instruction {
             Instruction::Loop(f, s) => vec![OPCODE_LOOP, *f, *s],
             Instruction::Duplicate => vec![OPCODE_DUPLICATE],
             Instruction::Call(args) => vec![OPCODE_CALL, *args],
+            Instruction::Closure(val) => vec![OPCODE_CLOSURE, *val],
         }
     }
 
@@ -191,6 +194,10 @@ impl Instruction {
                 let arg = consume(buffer, offset).ok_or(FetchError::Broken)?;
                 Ok(Instruction::Call(arg))
             }
+            OPCODE_CLOSURE => {
+                let arg = consume(buffer, offset).ok_or(FetchError::Broken)?;
+                Ok(Instruction::Closure(arg))
+            }
             x => Err(FetchError::Unknown(x)),
         }
     }
@@ -215,7 +222,7 @@ mod test {
     }
 
     #[test]
-    fn instruction_fetch_single_byte_size() {
+    fn instruction_fetch_zero_arg_instructions() {
         let data = [
             (OPCODE_NIL, Instruction::Nil),
             (OPCODE_TRUE, Instruction::True),
@@ -244,13 +251,14 @@ mod test {
     }
 
     #[test]
-    fn instruction_variable_parse() {
+    fn instruction_fetch_one_arg_instructions() {
         let data = [
             ([OPCODE_DEFINE_GLOBAL, 11], Instruction::DefineGlobal(11)),
             ([OPCODE_GET_GLOBAL, 42], Instruction::GetGlobal(42)),
             ([OPCODE_SET_GLOBAL, 31], Instruction::SetGlobal(31)),
             ([OPCODE_GET_LOCAL, 58], Instruction::GetLocal(58)),
             ([OPCODE_SET_LOCAL, 6], Instruction::SetLocal(6)),
+            ([OPCODE_CLOSURE, 34], Instruction::Closure(34)),
         ];
         for (inp, exp) in data.iter() {
             let mut offset = 0;
@@ -262,7 +270,7 @@ mod test {
     }
 
     #[test]
-    fn instruction_jump_parse() {
+    fn instruction_fetch_two_arg_instructions() {
         let data = [
             (
                 [OPCODE_JUMP_IF_FALSE, 58, 42],

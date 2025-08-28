@@ -1,6 +1,6 @@
 use std::{fmt::Display, num::ParseFloatError, rc::Rc};
 
-use crate::{Func, NativeFn, NativeFunc};
+use crate::{Closure, Func, NativeFn, NativeFunc};
 
 pub type Double = f32;
 
@@ -12,6 +12,7 @@ pub enum Value {
     Text(Rc<String>),
     Fun(Rc<Func>),
     NativeFun(Rc<NativeFunc>),
+    Closure(Rc<Closure>),
 }
 
 impl Default for Value {
@@ -28,6 +29,7 @@ impl PartialEq for Value {
             (Self::Text(l), Self::Text(r)) => l == r,
             (Self::Fun(l), Self::Fun(r)) => Rc::ptr_eq(l, r),
             (Self::NativeFun(l), Self::NativeFun(r)) => Rc::ptr_eq(l, r),
+            (Self::Closure(l), Self::Closure(r)) => Rc::ptr_eq(l, r),
             _ => false,
         }
     }
@@ -42,11 +44,16 @@ impl Display for Value {
             Value::Text(val) => write!(f, "{val}"),
             Value::Fun(val) => write!(f, "{val}"),
             Value::NativeFun(val) => write!(f, "{val}"),
+            Value::Closure(val) => write!(f, "{}", val.func()),
         }
     }
 }
 
 impl Value {
+    pub fn closure(func: Rc<Func>) -> Self {
+        Value::Closure(Rc::new(Closure::new(func)))
+    }
+
     pub fn native_func(func: NativeFn) -> Self {
         Value::NativeFun(Rc::new(NativeFunc::with(func)))
     }
@@ -71,6 +78,13 @@ impl Value {
     pub fn as_number(&self) -> Option<Double> {
         match self {
             Value::Number(x) => Some(*x),
+            _ => None,
+        }
+    }
+
+    pub fn as_function(&self) -> Option<Rc<Func>> {
+        match self {
+            Value::Fun(func_ref) => Some(func_ref.clone()),
             _ => None,
         }
     }
