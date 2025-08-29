@@ -185,8 +185,8 @@ impl Machine {
                     let closure = Value::closure(func.clone());
                     self.stack_push(closure)?;
                 }
-                Instruction::GetUpvalue(index) => todo!(),
-                Instruction::SetUpvalue(index) => todo!(),
+                Instruction::GetUpvalue(_index) => todo!(),
+                Instruction::SetUpvalue(_index) => todo!(),
             }
         }
         Ok(())

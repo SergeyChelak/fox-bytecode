@@ -173,6 +173,8 @@ impl Assembler {
         let func = self.end_compiler();
         let idx = self.make_constant(Value::Fun(Rc::new(func)));
         self.emit_instruction(&Instruction::Closure(idx));
+        let line = self.get_line();
+        self.compiler_mut().emit_upvalues(line);
     }
 }
 
@@ -349,10 +351,7 @@ impl Assembler {
                 Instruction::GetLocal(info.index),
                 Instruction::SetLocal(info.index),
             )
-        } else if let Some((index, err)) = self.compiler_mut().resolve_upvalue(&token) {
-            if let Some(err) = err {
-                self.error(err);
-            }
+        } else if let Some(index) = self.resolve_upvalue(&token) {
             (
                 Instruction::GetUpvalue(index),
                 Instruction::SetUpvalue(index),
@@ -366,6 +365,17 @@ impl Assembler {
             self.emit_instruction(&setter);
         } else {
             self.emit_instruction(&getter);
+        }
+    }
+
+    fn resolve_upvalue(&mut self, token: &Token) -> Option<u8> {
+        match self.compiler_mut().resolve_upvalue(token) {
+            super::compiler::UpvalueResolve::None => None,
+            super::compiler::UpvalueResolve::Index(index) => Some(index),
+            super::compiler::UpvalueResolve::Error(err) => {
+                self.error(err);
+                Some(0)
+            }
         }
     }
 }

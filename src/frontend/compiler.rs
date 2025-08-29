@@ -87,6 +87,21 @@ impl Compiler {
         let size = idx - offset;
         (res, size)
     }
+
+    pub fn emit_upvalues(&mut self, line: usize) {
+        self.upvalues
+            .iter()
+            .take(self.func.upvalue_count)
+            .map(|upvalue| {
+                let byte = if upvalue.is_local { 1u8 } else { 0 };
+                (byte, upvalue.index)
+            })
+            .for_each(|(is_local, index)| {
+                let chunk = self.func.chunk_mut();
+                chunk.write_u8(is_local, line);
+                chunk.write_u8(index, line);
+            });
+    }
 }
 
 /// Scope management functions
@@ -147,28 +162,35 @@ impl Compiler {
         None
     }
 
-    pub fn resolve_upvalue(&mut self, token: &Token) -> Option<(u8, Option<&'static str>)> {
-        let Some(local) = self.enclosing.as_ref()?.resolve_local(token) else {
-            return None;
+    pub fn resolve_upvalue(&mut self, token: &Token) -> UpvalueResolve {
+        let Some(enclosing) = self.enclosing.as_mut() else {
+            return UpvalueResolve::None;
         };
-        let (index, err) = self.update_value(local.index, true);
-        Some((index as u8, err))
+
+        if let Some(local) = enclosing.resolve_local(token) {
+            return self.update_upvalue(local.index, true).into();
+        }
+
+        match enclosing.resolve_upvalue(token) {
+            UpvalueResolve::Index(upvalue) => self.update_upvalue(upvalue, false).into(),
+            any => any,
+        }
     }
 
-    fn update_value(&mut self, index: u8, is_local: bool) -> (usize, Option<&'static str>) {
+    fn update_upvalue(&mut self, index: u8, is_local: bool) -> Result<usize, &'static str> {
         let count = self.func.upvalue_count;
         for (i, upvalue) in self.upvalues.iter().take(count).enumerate() {
             if upvalue.index == index && upvalue.is_local == is_local {
-                return (i, None);
+                return Ok(i);
             }
         }
         if count == UINT8_COUNT {
-            return (0, Some("Too many closure variables in function."));
+            return Err("Too many closure variables in function");
         }
         self.upvalues[count] = Upvalue { index, is_local };
         let result = count + 1;
         self.func.upvalue_count = result;
-        (result, None)
+        Ok(result)
     }
 
     fn is_last_out_of_scope(&mut self) -> bool {
@@ -216,6 +238,21 @@ impl Local {
 struct Upvalue {
     index: u8,
     is_local: bool,
+}
+
+pub enum UpvalueResolve {
+    None,
+    Index(u8),
+    Error(&'static str),
+}
+
+impl From<Result<usize, &'static str>> for UpvalueResolve {
+    fn from(value: Result<usize, &'static str>) -> Self {
+        match value {
+            Ok(index) => UpvalueResolve::Index(index as u8),
+            Err(msg) => UpvalueResolve::Error(msg),
+        }
+    }
 }
 
 #[cfg(test)]
