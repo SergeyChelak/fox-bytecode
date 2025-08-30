@@ -1,5 +1,6 @@
 use std::fmt::Display;
 
+mod call_frame;
 mod machine;
 pub use machine::Machine;
 mod service;

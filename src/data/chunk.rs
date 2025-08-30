@@ -1,4 +1,4 @@
-use crate::{FetchResult, Instruction, Value};
+use crate::{FetchResult, Instruction, UpvalueData, Value};
 
 #[derive(Debug, Default, Clone)]
 pub struct Chunk {
@@ -38,6 +38,10 @@ impl Chunk {
 
     pub fn fetch(&self, offset: &mut usize) -> FetchResult<Instruction> {
         Instruction::fetch(&self.code, offset)
+    }
+
+    pub fn upvalue_data(&self, offset: &mut usize) -> Option<UpvalueData> {
+        UpvalueData::fetch(&self.code, offset)
     }
 
     pub fn line_number(&self, idx: usize) -> Option<usize> {

@@ -2,45 +2,13 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use crate::{
     MachineError, MachineResult, Shared, StackTraceElement,
-    backend::{NativeFunctionsProvider, service::BackendService},
+    backend::{NativeFunctionsProvider, call_frame::CallFrame, service::BackendService},
     data::*,
     utils::bytes_to_word,
 };
 
 const FRAMES_MAX: usize = 64;
 const STACK_MAX_SIZE: usize = FRAMES_MAX * UINT8_COUNT;
-
-struct CallFrame {
-    closure: Rc<Closure>,
-    ip: usize,
-    frame_start: usize,
-}
-
-impl CallFrame {
-    fn ip_inc(&mut self, val: usize) {
-        self.ip += val;
-    }
-
-    fn ip_dec(&mut self, val: usize) {
-        self.ip -= val;
-    }
-
-    fn func(&self) -> &Func {
-        self.closure.func()
-    }
-
-    fn chunk(&self) -> &Chunk {
-        self.func().chunk()
-    }
-
-    fn line_number(&self) -> Option<usize> {
-        self.chunk().line_number(self.ip)
-    }
-
-    fn fetch_instruction(&mut self) -> FetchResult<Instruction> {
-        self.closure.func().chunk().fetch(&mut self.ip)
-    }
-}
 
 pub struct Machine {
     frames: Vec<CallFrame>,
@@ -133,7 +101,7 @@ impl Machine {
                         break 'run_loop;
                     }
 
-                    self.stack.truncate(frame.frame_start);
+                    self.stack.truncate(frame.frame_start());
                     self.stack_push(result)?;
                 }
                 Instruction::Pop => {
@@ -194,10 +162,17 @@ impl Machine {
                 "Bug: closure refers to non-function constant",
             ));
         };
-        let closure = Value::closure(func.clone());
-        self.stack_push(closure)?;
-        // TODO: fill closure with upvalues
-        Ok(())
+        let closure = Closure::new(func.clone());
+        let count = closure.declared_upvalue_count();
+        for _ in 0..count {
+            let Some(data) = self.frame_mut()?.fetch_upvalue_data() else {
+                return Err(MachineError::with_str("Bug: missing upvalue"));
+            };
+            todo!()
+            // let upvalue = if data.is_local { todo!() } else { todo!() };
+        }
+        let value = Value::Closure(Rc::new(closure));
+        self.stack_push(value)
     }
 
     fn define_global(&mut self, index: u8) -> MachineResult<()> {
@@ -333,11 +308,7 @@ impl Machine {
 
     fn unchecked_call(&mut self, closure: Rc<Closure>, arg_count: usize) {
         let frame_start = self.stack.len() - arg_count - 1;
-        let frame = CallFrame {
-            closure,
-            ip: 0,
-            frame_start,
-        };
+        let frame = CallFrame::new(closure, frame_start);
         self.frames.push(frame);
     }
 
@@ -363,14 +334,14 @@ impl Machine {
     }
 
     fn relative_to_absolute_slot(&self, relative_slot: u8) -> MachineResult<usize> {
-        let start = self.frame()?.frame_start;
+        let start = self.frame()?.frame_start();
         Ok(start + relative_slot as usize)
     }
 
     fn runtime_error<T: AsRef<str>>(&self, message: T) -> MachineError {
         let mut line_number: Option<usize> = None;
         if let Ok(frame) = self.frame() {
-            let idx = frame.ip - 1;
+            let idx = frame.ip() - 1;
             line_number = frame.chunk().line_number(idx);
         }
         MachineError {
@@ -386,7 +357,7 @@ impl Machine {
             .rev()
             .map(|frame| StackTraceElement {
                 line: frame.line_number(),
-                func_name: frame.closure.func().name.clone(),
+                func_name: frame.func_name().map(|s| s.to_string()),
             })
             .collect::<Vec<_>>();
         self.service.borrow_mut().set_stack_trace(stack_trace);
