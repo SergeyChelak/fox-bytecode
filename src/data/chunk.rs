@@ -12,6 +12,12 @@ impl Chunk {
         Self::default()
     }
 
+    pub fn write_buffer(&mut self, buffer: &[u8], line: usize) {
+        for byte in buffer {
+            self.write_u8(*byte, line);
+        }
+    }
+
     pub fn write_u8(&mut self, byte: u8, line: usize) {
         self.code.push(byte);
         self.line.push(line);

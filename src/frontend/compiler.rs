@@ -1,4 +1,7 @@
-use crate::{Chunk, FetchResult, Func, FuncType, Instruction, UINT8_COUNT, Value, frontend::Token};
+use crate::{
+    Chunk, FetchResult, Func, FuncType, Instruction, UINT8_COUNT, UpvalueData, Value,
+    frontend::Token,
+};
 
 pub const MAX_SCOPE_SIZE: usize = UINT8_COUNT;
 
@@ -7,7 +10,7 @@ pub struct Compiler {
     func_type: FuncType,
     locals: Vec<Local>,
     depth: usize,
-    upvalues: [Upvalue; UINT8_COUNT],
+    upvalues: [UpvalueData; UINT8_COUNT],
     pub(crate) enclosing: Option<Box<Compiler>>,
 }
 
@@ -68,9 +71,7 @@ impl Compiler {
     pub fn emit_instruction_at_line(&mut self, instruction: &Instruction, line: usize) -> usize {
         let start = self.chunk_position();
         let bytes: Vec<u8> = instruction.as_vec();
-        for byte in bytes.into_iter() {
-            self.chunk_mut().write_u8(byte, line);
-        }
+        self.chunk_mut().write_buffer(&bytes, line);
         start
     }
 
@@ -92,14 +93,10 @@ impl Compiler {
         self.upvalues
             .iter()
             .take(self.func.upvalue_count)
-            .map(|upvalue| {
-                let byte = if upvalue.is_local { 1u8 } else { 0 };
-                (byte, upvalue.index)
-            })
-            .for_each(|(is_local, index)| {
+            .map(|data| data.as_vec())
+            .for_each(|buffer| {
                 let chunk = self.func.chunk_mut();
-                chunk.write_u8(is_local, line);
-                chunk.write_u8(index, line);
+                chunk.write_buffer(&buffer, line);
             });
     }
 }
@@ -187,7 +184,7 @@ impl Compiler {
         if count == UINT8_COUNT {
             return Err("Too many closure variables in function");
         }
-        self.upvalues[count] = Upvalue { index, is_local };
+        self.upvalues[count] = UpvalueData { index, is_local };
         let result = count + 1;
         self.func.upvalue_count = result;
         Ok(result)
@@ -232,12 +229,6 @@ impl Local {
             depth: Some(0),
         }
     }
-}
-
-#[derive(Default, Clone, Copy)]
-struct Upvalue {
-    index: u8,
-    is_local: bool,
 }
 
 pub enum UpvalueResolve {

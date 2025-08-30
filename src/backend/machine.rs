@@ -36,6 +36,10 @@ impl CallFrame {
     fn line_number(&self) -> Option<usize> {
         self.chunk().line_number(self.ip)
     }
+
+    fn fetch_instruction(&mut self) -> FetchResult<Instruction> {
+        self.closure.func().chunk().fetch(&mut self.ip)
+    }
 }
 
 pub struct Machine {
@@ -175,20 +179,24 @@ impl Machine {
                     let value = self.stack_peek_at(arg_count)?;
                     self.call_value(value, arg_count)?;
                 }
-                Instruction::Closure(index) => {
-                    let val = self.read_const(index)?;
-                    let Some(func) = &val.as_function() else {
-                        return Err(MachineError::with_str(
-                            "Bug: closure refers to non-function constant",
-                        ));
-                    };
-                    let closure = Value::closure(func.clone());
-                    self.stack_push(closure)?;
-                }
+                Instruction::Closure(index) => self.compose_closure(index)?,
                 Instruction::GetUpvalue(_index) => todo!(),
                 Instruction::SetUpvalue(_index) => todo!(),
             }
         }
+        Ok(())
+    }
+
+    fn compose_closure(&mut self, index: u8) -> MachineResult<()> {
+        let val = self.read_const(index)?;
+        let Some(func) = &val.as_function() else {
+            return Err(MachineError::with_str(
+                "Bug: closure refers to non-function constant",
+            ));
+        };
+        let closure = Value::closure(func.clone());
+        self.stack_push(closure)?;
+        // TODO: fill closure with upvalues
         Ok(())
     }
 
@@ -337,7 +345,7 @@ impl Machine {
         let frame = self
             .frame_mut()
             .map_err(|err| FetchError::Other(err.text))?;
-        frame.closure.func().chunk().fetch(&mut frame.ip)
+        frame.fetch_instruction()
     }
 
     fn frame(&self) -> MachineResult<&CallFrame> {

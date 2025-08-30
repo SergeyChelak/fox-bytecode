@@ -1,5 +1,7 @@
 use std::fmt::Display;
 
+use crate::data::consume_byte;
+
 pub const OPCODE_CONSTANT: u8 = 0;
 pub const OPCODE_NIL: u8 = 1;
 pub const OPCODE_TRUE: u8 = 2;
@@ -134,10 +136,10 @@ impl Instruction {
     }
 
     pub fn fetch(buffer: &[u8], offset: &mut usize) -> FetchResult<Self> {
-        let byte = consume(buffer, offset).ok_or(FetchError::End)?;
+        let byte = consume_byte(buffer, offset).ok_or(FetchError::End)?;
         match byte {
             OPCODE_CONSTANT => {
-                let arg1 = consume(buffer, offset).ok_or(FetchError::Broken)?;
+                let arg1 = consume_byte(buffer, offset).ok_or(FetchError::Broken)?;
                 Ok(Instruction::Constant(arg1))
             }
             OPCODE_EQUAL => Ok(Instruction::Equal),
@@ -161,66 +163,60 @@ impl Instruction {
 
             OPCODE_POP => Ok(Instruction::Pop),
             OPCODE_DEFINE_GLOBAL => {
-                let arg1 = consume(buffer, offset).ok_or(FetchError::Broken)?;
+                let arg1 = consume_byte(buffer, offset).ok_or(FetchError::Broken)?;
                 Ok(Instruction::DefineGlobal(arg1))
             }
             OPCODE_GET_GLOBAL => {
-                let arg1 = consume(buffer, offset).ok_or(FetchError::Broken)?;
+                let arg1 = consume_byte(buffer, offset).ok_or(FetchError::Broken)?;
                 Ok(Instruction::GetGlobal(arg1))
             }
             OPCODE_SET_GLOBAL => {
-                let arg1 = consume(buffer, offset).ok_or(FetchError::Broken)?;
+                let arg1 = consume_byte(buffer, offset).ok_or(FetchError::Broken)?;
                 Ok(Instruction::SetGlobal(arg1))
             }
             OPCODE_GET_LOCAL => {
-                let arg1 = consume(buffer, offset).ok_or(FetchError::Broken)?;
+                let arg1 = consume_byte(buffer, offset).ok_or(FetchError::Broken)?;
                 Ok(Instruction::GetLocal(arg1))
             }
             OPCODE_SET_LOCAL => {
-                let arg1 = consume(buffer, offset).ok_or(FetchError::Broken)?;
+                let arg1 = consume_byte(buffer, offset).ok_or(FetchError::Broken)?;
                 Ok(Instruction::SetLocal(arg1))
             }
             OPCODE_JUMP_IF_FALSE => {
-                let low = consume(buffer, offset).ok_or(FetchError::Broken)?;
-                let high = consume(buffer, offset).ok_or(FetchError::Broken)?;
+                let low = consume_byte(buffer, offset).ok_or(FetchError::Broken)?;
+                let high = consume_byte(buffer, offset).ok_or(FetchError::Broken)?;
                 Ok(Instruction::JumpIfFalse(low, high))
             }
             OPCODE_JUMP => {
-                let low = consume(buffer, offset).ok_or(FetchError::Broken)?;
-                let high = consume(buffer, offset).ok_or(FetchError::Broken)?;
+                let low = consume_byte(buffer, offset).ok_or(FetchError::Broken)?;
+                let high = consume_byte(buffer, offset).ok_or(FetchError::Broken)?;
                 Ok(Instruction::Jump(low, high))
             }
             OPCODE_LOOP => {
-                let low = consume(buffer, offset).ok_or(FetchError::Broken)?;
-                let high = consume(buffer, offset).ok_or(FetchError::Broken)?;
+                let low = consume_byte(buffer, offset).ok_or(FetchError::Broken)?;
+                let high = consume_byte(buffer, offset).ok_or(FetchError::Broken)?;
                 Ok(Instruction::Loop(low, high))
             }
             OPCODE_DUPLICATE => Ok(Instruction::Duplicate),
             OPCODE_CALL => {
-                let arg = consume(buffer, offset).ok_or(FetchError::Broken)?;
+                let arg = consume_byte(buffer, offset).ok_or(FetchError::Broken)?;
                 Ok(Instruction::Call(arg))
             }
             OPCODE_CLOSURE => {
-                let arg = consume(buffer, offset).ok_or(FetchError::Broken)?;
+                let arg = consume_byte(buffer, offset).ok_or(FetchError::Broken)?;
                 Ok(Instruction::Closure(arg))
             }
             OPCODE_GET_UPVALUE => {
-                let arg = consume(buffer, offset).ok_or(FetchError::Broken)?;
+                let arg = consume_byte(buffer, offset).ok_or(FetchError::Broken)?;
                 Ok(Instruction::GetUpvalue(arg))
             }
             OPCODE_SET_UPVALUE => {
-                let arg = consume(buffer, offset).ok_or(FetchError::Broken)?;
+                let arg = consume_byte(buffer, offset).ok_or(FetchError::Broken)?;
                 Ok(Instruction::SetUpvalue(arg))
             }
             x => Err(FetchError::Unknown(x)),
         }
     }
-}
-
-fn consume(buffer: &[u8], offset: &mut usize) -> Option<u8> {
-    let byte = buffer.get(*offset)?;
-    *offset += 1;
-    Some(*byte)
 }
 
 #[cfg(test)]
