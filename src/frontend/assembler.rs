@@ -325,7 +325,6 @@ impl Assembler {
     }
 
     fn unary(&mut self, _can_assign: bool) {
-        // TODO: made according to the book, looks bad...
         let operator_type = self.prev_token_type();
         // Compile the operand
         self.parse_precedence(Precedence::Unary);
