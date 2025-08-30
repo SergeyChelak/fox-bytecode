@@ -2,14 +2,15 @@ use std::rc::Rc;
 
 mod data;
 pub use data::*;
-mod frontend;
-use frontend::*;
 mod errors;
+mod frontend;
 pub use errors::*;
 mod utils;
 pub use utils::*;
 mod backend;
 pub use backend::*;
+
+pub use frontend::compile;
 
 pub fn interpret(
     code_ref: Rc<Vec<char>>,

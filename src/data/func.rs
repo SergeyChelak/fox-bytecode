@@ -19,6 +19,10 @@ impl Closure {
     pub fn func(&self) -> &Func {
         &self.func
     }
+
+    pub fn declared_upvalue_count(&self) -> usize {
+        self.func.upvalue_count
+    }
 }
 
 #[derive(Default, Debug)]
