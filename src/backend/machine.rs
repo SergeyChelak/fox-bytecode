@@ -1,4 +1,8 @@
-use std::{collections::HashMap, ops::Deref, rc::Rc};
+use std::{
+    collections::{HashMap, LinkedList},
+    ops::Deref,
+    rc::Rc,
+};
 
 use crate::{
     MachineError, MachineResult, Shared, StackTraceElement,
@@ -16,6 +20,7 @@ pub struct Machine {
     stack: Vec<Value>,
     globals: HashMap<Rc<String>, Value>,
     service: Shared<dyn BackendService>,
+    open_upvalues: LinkedList<Shared<Upvalue>>,
 }
 
 impl Machine {
@@ -50,6 +55,7 @@ impl Machine {
             stack: Vec::with_capacity(STACK_MAX_SIZE),
             globals: HashMap::new(),
             service,
+            open_upvalues: Default::default(),
         }
     }
 
@@ -192,7 +198,32 @@ impl Machine {
     }
 
     fn capture_upvalue(&mut self, index: u8) -> Shared<Upvalue> {
-        shared(Upvalue::Stack(index as usize))
+        let index = index as usize;
+
+        let mut position: Option<usize> = None;
+        for (i, val) in self.open_upvalues.iter().enumerate() {
+            let Upvalue::Stack(stack_idx) = *val.borrow().deref() else {
+                unreachable!("Bug: open upvalues should be stack allocated");
+            };
+            if stack_idx > index {
+                continue;
+            }
+            if stack_idx == index {
+                return val.clone();
+            }
+            position = Some(i);
+            break;
+        }
+
+        let upvalue = shared(Upvalue::Stack(index));
+        if let Some(p) = position {
+            let mut tail = self.open_upvalues.split_off(p);
+            self.open_upvalues.push_back(upvalue.clone());
+            self.open_upvalues.append(&mut tail);
+        } else {
+            self.open_upvalues.push_back(upvalue.clone());
+        }
+        upvalue
     }
 
     fn get_upvalue(&mut self, index: u8) -> MachineResult<()> {
