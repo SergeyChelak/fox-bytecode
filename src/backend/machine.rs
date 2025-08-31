@@ -160,6 +160,7 @@ impl Machine {
                 Instruction::Closure(index) => self.compose_closure(index)?,
                 Instruction::GetUpvalue(_index) => todo!(),
                 Instruction::SetUpvalue(_index) => todo!(),
+                Instruction::CloseUpvalue => todo!(),
             }
         }
         Ok(())

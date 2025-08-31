@@ -369,7 +369,7 @@ impl Assembler {
 
     fn resolve_upvalue(&mut self, token: &Token) -> Option<u8> {
         match self.compiler_mut().resolve_upvalue(token) {
-            super::compiler::UpvalueResolve::None => None,
+            super::compiler::UpvalueResolve::NotFound => None,
             super::compiler::UpvalueResolve::Index(index) => Some(index),
             super::compiler::UpvalueResolve::Error(err) => {
                 self.error(err);
