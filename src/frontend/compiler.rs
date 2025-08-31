@@ -151,10 +151,10 @@ impl Compiler {
         false
     }
 
-    pub fn resolve_local(&self, token: &Token) -> Option<LocalVariableInfo> {
+    pub fn resolve_local(&self, token: &Token) -> Option<LocalData> {
         for (i, local) in self.locals.iter().enumerate().rev() {
             if local.name == token.text {
-                let info = LocalVariableInfo {
+                let info = LocalData {
                     index: i as u8,
                     depth: local.depth,
                 };
@@ -225,7 +225,7 @@ impl Compiler {
     }
 }
 
-pub struct LocalVariableInfo {
+pub struct LocalData {
     pub index: u8,
     pub depth: Option<usize>,
 }
