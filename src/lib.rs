@@ -20,8 +20,8 @@ pub fn interpret(
 ) {
     let result = compile(code_ref.clone());
     match result {
-        Ok(src) => {
-            let mut vm = Machine::with(src, backend_service.clone(), native_fn_provider);
+        Ok(func) => {
+            let mut vm = Machine::with(func, backend_service.clone(), native_fn_provider);
             let result = vm.run();
 
             if result.is_err() {

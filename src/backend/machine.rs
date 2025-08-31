@@ -19,15 +19,25 @@ pub struct Machine {
 
 impl Machine {
     pub fn with(
-        closure: Closure,
+        func: Func,
         service: Shared<dyn BackendService>,
         native: impl NativeFunctionsProvider,
     ) -> Self {
         let mut vm = Self::new(service);
+        // setup native functions to VM
         native.get_functions().into_iter().for_each(|(name, func)| {
             vm.define_native(name, func);
         });
+        // prepare to start
+        let func_ref = Rc::new(func);
+        {
+            let func_val = Value::Fun(func_ref.clone());
+            _ = vm.stack_push(func_val);
+        }
+
+        let closure = Closure::new(func_ref);
         let closure_ref = Rc::new(closure);
+        _ = vm.stack_pop();
         _ = vm.stack_push(Value::Closure(closure_ref.clone()));
         vm.unchecked_call(closure_ref, 0);
         vm
@@ -163,14 +173,14 @@ impl Machine {
             ));
         };
         let closure = Closure::new(func.clone());
-        let count = closure.declared_upvalue_count();
-        for _ in 0..count {
-            let Some(data) = self.frame_mut()?.fetch_upvalue_data() else {
-                return Err(MachineError::with_str("Bug: missing upvalue"));
-            };
-            todo!()
-            // let upvalue = if data.is_local { todo!() } else { todo!() };
-        }
+        // let count = closure.declared_upvalue_count();
+        // for _ in 0..count {
+        //     let Some(data) = self.frame_mut()?.fetch_upvalue_data() else {
+        //         return Err(MachineError::with_str("Bug: missing upvalue"));
+        //     };
+        //     todo!()
+        //     // let upvalue = if data.is_local { todo!() } else { todo!() };
+        // }
         let value = Value::Closure(Rc::new(closure));
         self.stack_push(value)
     }
@@ -659,7 +669,6 @@ pub mod tests {
 
     fn make_machine(chunk: Chunk, backend: Shared<dyn BackendService>) -> Machine {
         let func = Func::any_with_chunk(chunk);
-        let closure = Closure::with(func);
-        Machine::with(closure, backend, EmptyNative)
+        Machine::with(func, backend, EmptyNative)
     }
 }

@@ -50,10 +50,6 @@ impl Display for Value {
 }
 
 impl Value {
-    pub fn closure(func: Rc<Func>) -> Self {
-        Value::Closure(Rc::new(Closure::new(func)))
-    }
-
     pub fn native_func(func: NativeFn) -> Self {
         Value::NativeFun(Rc::new(NativeFunc::with(func)))
     }
