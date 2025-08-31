@@ -37,6 +37,10 @@ impl CallFrame {
         self.closure.func()
     }
 
+    pub fn closure(&self) -> &Closure {
+        &self.closure
+    }
+
     pub fn chunk(&self) -> &Chunk {
         self.func().chunk()
     }

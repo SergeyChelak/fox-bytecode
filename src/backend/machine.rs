@@ -1,9 +1,10 @@
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use std::{collections::HashMap, ops::Deref, rc::Rc};
 
 use crate::{
     MachineError, MachineResult, Shared, StackTraceElement,
     backend::{NativeFunctionsProvider, call_frame::CallFrame, service::BackendService},
     data::*,
+    shared,
     utils::bytes_to_word,
 };
 
@@ -14,7 +15,7 @@ pub struct Machine {
     frames: Vec<CallFrame>,
     stack: Vec<Value>,
     globals: HashMap<Rc<String>, Value>,
-    service: Rc<RefCell<dyn BackendService>>,
+    service: Shared<dyn BackendService>,
 }
 
 impl Machine {
@@ -158,8 +159,8 @@ impl Machine {
                     self.call_value(value, arg_count)?;
                 }
                 Instruction::Closure(index) => self.compose_closure(index)?,
-                Instruction::GetUpvalue(_index) => todo!(),
-                Instruction::SetUpvalue(_index) => todo!(),
+                Instruction::GetUpvalue(index) => self.get_upvalue(index)?,
+                Instruction::SetUpvalue(index) => self.set_upvalue(index)?,
                 Instruction::CloseUpvalue => todo!(),
             }
         }
@@ -173,17 +174,61 @@ impl Machine {
                 "Bug: closure refers to non-function constant",
             ));
         };
-        let closure = Closure::new(func.clone());
-        // let count = closure.declared_upvalue_count();
-        // for _ in 0..count {
-        //     let Some(data) = self.frame_mut()?.fetch_upvalue_data() else {
-        //         return Err(MachineError::with_str("Bug: missing upvalue"));
-        //     };
-        //     todo!()
-        //     // let upvalue = if data.is_local { todo!() } else { todo!() };
-        // }
+        let mut closure = Closure::new(func.clone());
+        let count = closure.upvalues_count();
+        for i in 0..count {
+            let Some(data) = self.frame_mut()?.fetch_upvalue_data() else {
+                return Err(MachineError::with_str("Bug: missing upvalue"));
+            };
+            let upvalue = if data.is_local {
+                self.capture_upvalue(data.index)
+            } else {
+                self.frame()?.closure().upvalue(data.index as usize)
+            };
+            closure.assign_upvalue(i, upvalue);
+        }
         let value = Value::Closure(Rc::new(closure));
         self.stack_push(value)
+    }
+
+    fn capture_upvalue(&mut self, index: u8) -> Shared<Upvalue> {
+        shared(Upvalue::Stack(index as usize))
+    }
+
+    fn get_upvalue(&mut self, index: u8) -> MachineResult<()> {
+        let shared_upvalue = self.frame()?.closure().upvalue(index as usize);
+        let upvalue = shared_upvalue
+            .try_borrow()
+            .map_err(|err| MachineError::with_str(&err.to_string()))?;
+        let value = match upvalue.deref() {
+            Upvalue::Stack(index) => self.stack_get(*index)?,
+            Upvalue::Heap(ref_cell) => ref_cell.borrow().clone(),
+            Upvalue::Nil => {
+                return Err(MachineError::with_str("Bug: get_upvalue got nil"));
+            }
+        };
+        self.stack_push(value)
+    }
+
+    fn set_upvalue(&mut self, index: u8) -> MachineResult<()> {
+        let shared_upvalue = self.frame()?.closure().upvalue(index as usize);
+        let upvalue = shared_upvalue
+            .try_borrow()
+            .map_err(|err| MachineError::with_str(&err.to_string()))?;
+
+        let value = self.stack_peek()?;
+        match upvalue.deref() {
+            Upvalue::Stack(index) => {
+                self.stack[*index] = value;
+            }
+            Upvalue::Heap(ref_cell) => {
+                *ref_cell.borrow_mut() = value;
+            }
+            Upvalue::Nil => {
+                return Err(MachineError::with_str("Bug: set_upvalue got nil"));
+            }
+        };
+        Ok(())
     }
 
     fn define_global(&mut self, index: u8) -> MachineResult<()> {
@@ -258,6 +303,13 @@ impl Machine {
 
     fn stack_peek(&self) -> MachineResult<Value> {
         self.stack_peek_at(0)
+    }
+
+    fn stack_get(&self, index: usize) -> MachineResult<Value> {
+        self.stack
+            .get(index)
+            .cloned()
+            .ok_or(MachineError::with_str("Bug: invalid stack index"))
     }
 
     fn stack_peek_at(&self, rev_index: usize) -> MachineResult<Value> {

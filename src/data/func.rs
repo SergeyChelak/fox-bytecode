@@ -1,28 +1,57 @@
-use std::{fmt::Display, rc::Rc};
+use std::{
+    fmt::{Debug, Display},
+    rc::Rc,
+};
 
-use crate::{Chunk, Value};
+use crate::{Chunk, Shared, Value, shared};
 
-#[derive(Default, Debug)]
+#[derive(Default)]
 pub struct Closure {
     func: Rc<Func>,
+    upvalues: Vec<Shared<Upvalue>>,
+}
+
+impl Debug for Closure {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Closure")
+            .field("func", &self.func)
+            .field("upvalues_count", &self.upvalues.len())
+            .finish()
+    }
 }
 
 impl Closure {
-    pub fn with(func: Func) -> Self {
-        Self::new(Rc::new(func))
-    }
+    // pub fn with(func: Func) -> Self {
+    //     Self::new(Rc::new(func))
+    // }
 
     pub fn new(func: Rc<Func>) -> Self {
-        Self { func }
+        let count = func.upvalue_count;
+        let upvalues = vec![shared(Upvalue::Nil); count];
+        Self { func, upvalues }
     }
 
     pub fn func(&self) -> &Func {
         &self.func
     }
 
-    pub fn declared_upvalue_count(&self) -> usize {
-        self.func.upvalue_count
+    pub fn upvalues_count(&self) -> usize {
+        self.upvalues.len()
     }
+
+    pub fn upvalue(&self, index: usize) -> Shared<Upvalue> {
+        self.upvalues[index].clone()
+    }
+
+    pub fn assign_upvalue(&mut self, index: usize, upvalue: Shared<Upvalue>) {
+        self.upvalues[index] = upvalue;
+    }
+}
+
+pub enum Upvalue {
+    Stack(usize),
+    Heap(Shared<Value>),
+    Nil,
 }
 
 #[derive(Default, Debug)]
