@@ -81,7 +81,7 @@ impl Compiler {
     }
 
     pub fn emit_buffer(&mut self, buffer: &[u8], line: usize) {
-        self.chunk_mut().write_buffer(&buffer, line)
+        self.chunk_mut().write_buffer(buffer, line)
     }
 
     pub fn patch_instruction(&mut self, instruction: &Instruction, offset: usize) {
@@ -200,9 +200,8 @@ impl Compiler {
             return Err("Too many closure variables in function");
         }
         self.upvalues[count] = data;
-        let new_count = count + 1;
-        self.func.upvalue_count = new_count;
-        Ok(new_count)
+        self.func.upvalue_count = count + 1;
+        Ok(count)
     }
 
     fn is_last_out_of_scope(&mut self) -> bool {

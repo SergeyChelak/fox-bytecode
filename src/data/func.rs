@@ -22,7 +22,7 @@ impl Debug for Closure {
 
 impl Closure {
     pub fn new(func: Rc<Func>) -> Self {
-        let count = u8::MAX as usize;
+        let count = func.upvalue_count;
         let upvalues = vec![shared(Upvalue::Nil); count];
         Self { func, upvalues }
     }
@@ -32,7 +32,7 @@ impl Closure {
     }
 
     pub fn upvalues_count(&self) -> usize {
-        self.func.upvalue_count
+        self.upvalues.len()
     }
 
     pub fn upvalue(&self, index: usize) -> Shared<Upvalue> {
