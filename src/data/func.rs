@@ -21,12 +21,8 @@ impl Debug for Closure {
 }
 
 impl Closure {
-    // pub fn with(func: Func) -> Self {
-    //     Self::new(Rc::new(func))
-    // }
-
     pub fn new(func: Rc<Func>) -> Self {
-        let count = func.upvalue_count;
+        let count = u8::MAX as usize;
         let upvalues = vec![shared(Upvalue::Nil); count];
         Self { func, upvalues }
     }
@@ -36,7 +32,7 @@ impl Closure {
     }
 
     pub fn upvalues_count(&self) -> usize {
-        self.upvalues.len()
+        self.func.upvalue_count
     }
 
     pub fn upvalue(&self, index: usize) -> Shared<Upvalue> {

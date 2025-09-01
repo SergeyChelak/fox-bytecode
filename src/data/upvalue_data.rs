@@ -17,8 +17,8 @@ impl UpvalueData {
     }
 
     pub fn as_vec(&self) -> Vec<u8> {
-        let byte = if self.is_local { 1u8 } else { 0 };
-        vec![byte, self.index]
+        let local = if self.is_local { 1u8 } else { 0 };
+        vec![local, self.index]
     }
 }
 
