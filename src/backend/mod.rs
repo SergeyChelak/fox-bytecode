@@ -41,12 +41,10 @@ impl MachineError {
 
 impl Display for MachineError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let val = if let Some(num) = self.line_number {
-            &format!("{num}")
-        } else {
-            "???"
-        };
-        write!(f, "[line {val}] {}", self.text)
+        if let Some(num) = self.line_number {
+            write!(f, "[line {num}] ")?;
+        }
+        write!(f, "{}", self.text)
     }
 }
 
