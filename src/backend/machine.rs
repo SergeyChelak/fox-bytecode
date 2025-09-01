@@ -167,7 +167,10 @@ impl Machine {
                 Instruction::Closure(index) => self.compose_closure(index)?,
                 Instruction::GetUpvalue(index) => self.get_upvalue(index)?,
                 Instruction::SetUpvalue(index) => self.set_upvalue(index)?,
-                Instruction::CloseUpvalue => todo!(),
+                Instruction::CloseUpvalue => {
+                    self.close_upvalues(self.stack.len() - 1)?;
+                    self.stack_pop()?;
+                }
             }
         }
         Ok(())
@@ -187,7 +190,7 @@ impl Machine {
                 return Err(MachineError::with_str("Bug: missing upvalue"));
             };
             let upvalue = if data.is_local {
-                self.capture_upvalue(data.index)
+                self.capture_upvalue(data.index)?
             } else {
                 self.frame()?.closure().upvalue(data.index as usize)
             };
@@ -197,19 +200,17 @@ impl Machine {
         self.stack_push(value)
     }
 
-    fn capture_upvalue(&mut self, index: u8) -> Shared<Upvalue> {
+    fn capture_upvalue(&mut self, index: u8) -> MachineResult<Shared<Upvalue>> {
         let index = index as usize;
 
         let mut position: Option<usize> = None;
         for (i, val) in self.open_upvalues.iter().enumerate() {
-            let Upvalue::Stack(stack_idx) = *val.borrow().deref() else {
-                unreachable!("Bug: open upvalues should be stack allocated");
-            };
+            let stack_idx = extract_stack_index(val)?;
             if stack_idx > index {
                 continue;
             }
             if stack_idx == index {
-                return val.clone();
+                return Ok(val.clone());
             }
             position = Some(i);
             break;
@@ -223,7 +224,27 @@ impl Machine {
         } else {
             self.open_upvalues.push_back(upvalue.clone());
         }
-        upvalue
+        Ok(upvalue)
+    }
+
+    fn close_upvalues(&mut self, last: usize) -> MachineResult<()> {
+        loop {
+            let Some(front) = self.open_upvalues.front() else {
+                break;
+            };
+            let stack_index = extract_stack_index(front)?;
+            if stack_index < last {
+                break;
+            }
+            let value = self.stack[stack_index].clone();
+            let upvalue = self
+                .open_upvalues
+                .pop_front()
+                .ok_or(MachineError::with_str("Bug: failed to pop front upvalue"))?;
+
+            *upvalue.borrow_mut() = Upvalue::Heap(shared(value));
+        }
+        Ok(())
     }
 
     fn get_upvalue(&mut self, index: u8) -> MachineResult<()> {
@@ -456,6 +477,15 @@ impl Machine {
             .collect::<Vec<_>>();
         self.service.borrow_mut().set_stack_trace(stack_trace);
     }
+}
+
+fn extract_stack_index(val: &Shared<Upvalue>) -> MachineResult<usize> {
+    let Upvalue::Stack(stack_idx) = *val.borrow().deref() else {
+        return Err(MachineError::with_str(
+            "Bug: open upvalues should be stack allocated",
+        ));
+    };
+    Ok(stack_idx)
 }
 
 #[cfg(test)]
