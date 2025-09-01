@@ -42,7 +42,7 @@ impl Assembler {
         while !self.is_match(TokenType::Eof) {
             self.declaration();
         }
-        let func = self.end_compiler();
+        let func = self.end_compiler().function_consumed();
 
         if !self.errors.is_empty() {
             return Err(self.errors);
@@ -120,13 +120,13 @@ impl Assembler {
         self.error_at_current(message.as_ref());
     }
 
-    fn end_compiler(&mut self) -> Func {
+    fn end_compiler(&mut self) -> Compiler {
         self.emit_return();
         let Some(mut compiler) = self.compiler.take() else {
             panic!("Can't end compiler which is None")
         };
         self.compiler = compiler.enclosing.take();
-        compiler.function_consumed()
+        *compiler
     }
 }
 
@@ -170,11 +170,20 @@ impl Assembler {
         self.consume(TokenType::LeftBrace, "Expect '{' before function body");
         self.block();
 
-        let func = self.end_compiler();
+        let compiler = self.end_compiler();
+        let (func, upvalues) = compiler.consume_closure_data();
+        let upvalues_count = func.upvalue_count;
+
         let idx = self.make_constant(Value::Fun(Rc::new(func)));
         self.emit_instruction(&Instruction::Closure(idx));
         let line = self.get_line();
-        self.compiler_mut().emit_upvalues(line);
+        upvalues
+            .iter()
+            .take(upvalues_count)
+            .map(|data| data.as_vec())
+            .for_each(|buffer| {
+                self.compiler_mut().emit_buffer(&buffer, line);
+            });
     }
 }
 

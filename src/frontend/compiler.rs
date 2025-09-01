@@ -4,13 +4,14 @@ use crate::{
 };
 
 pub const MAX_SCOPE_SIZE: usize = UINT8_COUNT;
+type UpvalueDataArray = [UpvalueData; UINT8_COUNT];
 
 pub struct Compiler {
     func: Box<Func>,
     func_type: FuncType,
     locals: Vec<Local>,
     depth: usize,
-    upvalues: [UpvalueData; UINT8_COUNT],
+    upvalues: UpvalueDataArray,
     pub(crate) enclosing: Option<Box<Compiler>>,
 }
 
@@ -49,6 +50,10 @@ impl Compiler {
         *self.func
     }
 
+    pub fn consume_closure_data(self) -> (Func, UpvalueDataArray) {
+        (*self.func, self.upvalues)
+    }
+
     pub fn function(&self) -> &Func {
         self.func.as_ref()
     }
@@ -71,8 +76,12 @@ impl Compiler {
     pub fn emit_instruction_at_line(&mut self, instruction: &Instruction, line: usize) -> usize {
         let start = self.chunk_position();
         let bytes: Vec<u8> = instruction.as_vec();
-        self.chunk_mut().write_buffer(&bytes, line);
+        self.emit_buffer(&bytes, line);
         start
+    }
+
+    pub fn emit_buffer(&mut self, buffer: &[u8], line: usize) {
+        self.chunk_mut().write_buffer(&buffer, line)
     }
 
     pub fn patch_instruction(&mut self, instruction: &Instruction, offset: usize) {
@@ -87,17 +96,6 @@ impl Compiler {
         let res = self.chunk().fetch(&mut idx);
         let size = idx - offset;
         (res, size)
-    }
-
-    pub fn emit_upvalues(&mut self, line: usize) {
-        self.upvalues
-            .iter()
-            .take(self.func.upvalue_count)
-            .map(|data| data.as_vec())
-            .for_each(|buffer| {
-                let chunk = self.func.chunk_mut();
-                chunk.write_buffer(&buffer, line);
-            });
     }
 }
 
