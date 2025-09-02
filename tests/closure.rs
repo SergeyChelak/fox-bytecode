@@ -1,63 +1,198 @@
-// use fox_bytecode::compile;
+use crate::common::interpret_using_probe;
+mod common;
 
-// use crate::common::{interpret_using_probe, interpret_with, str_to_code_ref};
-// mod common;
+#[test]
+fn closed_upvalues_test() {
+    let src = r#"
+        fun outer() {
+          var x = "outside";
+          fun inner() {
+            print x;
+          }
 
-// #[test]
-// fn emit_upvalues_test() {
-//     let src = r#"
-//         fun outer() {
-//           var a = 1;
-//           var b = 2;
-//           fun middle() {
-//             var c = 3;
-//             var d = 4;
-//             fun inner() {
-//               print a + c + b + d;
-//             }
-//           }
-//         }
-//     "#;
-//     let code_ref = str_to_code_ref(src);
-//     let closure = compile(code_ref).expect("Compilation failed");
+          return inner;
+        }
 
-//     let mut offset = 0;
-//     while let Ok(instr) = closure.func().chunk().fetch(&mut offset) {
-//         println!("{instr:?}");
-//     }
-//     panic!();
+        var closure = outer();
+        closure();
+        print "OK";
+    "#;
+    let probe = interpret_using_probe(src);
+    let output = &["outside", "OK"];
+    assert_eq!(None, probe.borrow().top_error_message());
+    probe.borrow().assert_output_match(output);
+}
 
-//     let outer_fn = closure
-//         .func()
-//         .chunk()
-//         .read_const(1)
-//         .expect("outer function not found")
-//         .as_function()
-//         .expect("not a function at outer");
+#[test]
+fn value_and_vars_test() {
+    let src = r#"
+        var globalSet;
+        var globalGet;
 
-//     let middle_fn = outer_fn
-//         .chunk()
-//         .read_const(2)
-//         .expect("middle function not found")
-//         .as_function()
-//         .expect("not a function at middle");
+        fun main() {
+          var a = "initial";
 
-//     let inner_fn = middle_fn
-//         .chunk()
-//         .read_const(2)
-//         .expect("middle function not found")
-//         .as_function()
-//         .expect("not a function at middle");
+          fun set() { a = "updated"; }
+          fun get() { print a; }
 
-//     let mut offset = 0;
-//     while let Ok(instr) = inner_fn.chunk().fetch(&mut offset) {
-//         println!("{instr:?}");
-//     }
+          globalSet = set;
+          globalGet = get;
+        }
 
-//     // let mut idx = 0;
-//     // while let Some(value) = middle_fn.chunk().read_const(idx) {
-//     //     println!("Const @{idx} = {value} {value:?}");
-//     //     idx += 1;
-//     // }
-//     panic!()
-// }
+        main();
+        globalGet();
+        globalSet();
+        globalGet();
+        print "OK";
+    "#;
+    let probe = interpret_using_probe(src);
+    let output = &["initial", "updated", "OK"];
+    assert_eq!(None, probe.borrow().top_error_message());
+    probe.borrow().assert_output_match(output);
+}
+
+#[test]
+fn closure_test() {
+    let src = r#"
+        var x = "global";
+        fun outer() {
+          var x = "outer";
+          fun inner() {
+            print x;
+          }
+          inner();
+        }
+        outer();
+        print "OK";
+    "#;
+    let probe = interpret_using_probe(src);
+    let output = &["outer", "OK"];
+    assert_eq!(None, probe.borrow().top_error_message());
+    probe.borrow().assert_output_match(output);
+}
+
+#[test]
+fn make_closure_test() {
+    let src = r#"
+        fun makeClosure() {
+          var local = "local";
+          fun closure() {
+            print local;
+          }
+          return closure;
+        }
+        var closure = makeClosure();
+        closure();
+        print "OK";
+    "#;
+    let probe = interpret_using_probe(src);
+    let output = &["local", "OK"];
+    assert_eq!(None, probe.borrow().top_error_message());
+    probe.borrow().assert_output_match(output);
+}
+
+#[test]
+fn closure_mutate_shared_test() {
+    let src = r#"
+        fun outer() {
+          var x = 1;
+          x = 2;
+          fun inner() {
+            print x;
+          }
+          x = 3;
+          inner();
+        }
+        outer();
+        print "OK";
+    "#;
+    let probe = interpret_using_probe(src);
+    let output = &["3", "OK"];
+    assert_eq!(None, probe.borrow().top_error_message());
+    probe.borrow().assert_output_match(output);
+}
+
+#[test]
+fn closure_nested_upvalues_test() {
+    let src = r#"
+        fun outer() {
+          var a = 1;
+          var b = 2;
+          fun middle() {
+            var c = 3;
+            var d = 4;
+            fun inner() {
+                print a + c + b + d;
+            }
+            return inner;
+          }
+          return middle;
+        }
+
+        var f1 = outer();
+        var f2 = f1();
+        f2();
+        print "OK";
+    "#;
+    let probe = interpret_using_probe(src);
+    let output = &["10", "OK"];
+    assert_eq!(None, probe.borrow().top_error_message());
+    probe.borrow().assert_output_match(output);
+}
+
+#[test]
+fn closure_nesting_test() {
+    let src = r#"
+        fun outer() {
+          var x = "value";
+          fun middle() {
+            fun inner() {
+              print x;
+            }
+
+            print "create inner closure";
+            return inner;
+          }
+
+          print "return from outer";
+          return middle;
+        }
+
+        var mid = outer();
+        var in = mid();
+        in();
+    "#;
+    let probe = interpret_using_probe(src);
+    let output = &["return from outer", "create inner closure", "value"];
+    assert_eq!(None, probe.borrow().top_error_message());
+    probe.borrow().assert_output_match(output);
+}
+
+#[test]
+fn closure_capture_loop_var_test() {
+    let src = r#"
+        var globalOne;
+        var globalTwo;
+
+        fun main() {
+          for (var a = 1; a <= 2; a = a + 1) {
+            fun closure() {
+              print a;
+            }
+            if (globalOne == nil) {
+              globalOne = closure;
+            } else {
+              globalTwo = closure;
+            }
+          }
+        }
+
+        main();
+        globalOne();
+        globalTwo();
+    "#;
+    let probe = interpret_using_probe(src);
+    let output = &["3", "3"];
+    assert_eq!(None, probe.borrow().top_error_message());
+    probe.borrow().assert_output_match(output);
+}
