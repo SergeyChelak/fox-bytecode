@@ -13,3 +13,16 @@ fn class_declaration_test() {
     assert_eq!(None, probe.borrow().top_error_message());
     probe.borrow().assert_output_match(output);
 }
+
+#[test]
+fn class_instantiation_test() {
+    let src = r#"
+        class Brioche {}
+        print Brioche();
+        print "OK";
+    "#;
+    let probe = interpret_using_probe(src);
+    let output = &["<Brioche instance>", "OK"];
+    assert_eq!(None, probe.borrow().top_error_message());
+    probe.borrow().assert_output_match(output);
+}
