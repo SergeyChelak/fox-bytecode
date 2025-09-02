@@ -1,10 +1,12 @@
 mod chunk;
+mod class;
 mod func;
 mod instruction;
 mod upvalue_data;
 mod value;
 
 pub use chunk::Chunk;
+pub use class::*;
 pub use func::*;
 pub use instruction::*;
 pub use upvalue_data::*;

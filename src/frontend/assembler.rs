@@ -78,7 +78,9 @@ impl Assembler {
     }
 
     fn declaration(&mut self) {
-        if self.is_match(TokenType::Fun) {
+        if self.is_match(TokenType::Class) {
+            self.class_declaration();
+        } else if self.is_match(TokenType::Fun) {
             self.fun_declaration();
         } else if self.is_match(TokenType::Var) {
             self.var_declaration();
@@ -445,6 +447,21 @@ impl Assembler {
 
     fn identifier_constant(&mut self, token: Token) -> u8 {
         self.make_constant(Value::text_from_string(token.text))
+    }
+}
+
+/// Classes
+impl Assembler {
+    fn class_declaration(&mut self) {
+        self.consume(TokenType::Identifier, "Expect class name");
+        let idx = self.identifier_constant(self.previous.clone());
+        self.declare_variable();
+
+        self.emit_instruction(&Instruction::Class(idx));
+        self.define_variable(idx);
+
+        self.consume(TokenType::LeftBrace, "Expect '{' before class body");
+        self.consume(TokenType::RightBrace, "Expect '}' after class body");
     }
 }
 

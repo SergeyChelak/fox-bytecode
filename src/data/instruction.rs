@@ -32,6 +32,7 @@ pub const OPCODE_CLOSURE: u8 = 26;
 pub const OPCODE_GET_UPVALUE: u8 = 27;
 pub const OPCODE_SET_UPVALUE: u8 = 28;
 pub const OPCODE_CLOSE_UPVALUE: u8 = 29;
+pub const OPCODE_CLASS: u8 = 30;
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Instruction {
@@ -65,6 +66,7 @@ pub enum Instruction {
     GetUpvalue(u8),
     SetUpvalue(u8),
     CloseUpvalue,
+    Class(u8),
 }
 
 impl Instruction {
@@ -131,6 +133,7 @@ impl Instruction {
             Instruction::GetUpvalue(val) => vec![OPCODE_GET_UPVALUE, *val],
             Instruction::SetUpvalue(val) => vec![OPCODE_SET_UPVALUE, *val],
             Instruction::CloseUpvalue => vec![OPCODE_CLOSE_UPVALUE],
+            Instruction::Class(val) => vec![OPCODE_CLASS, *val],
         }
     }
 
@@ -218,6 +221,10 @@ impl Instruction {
                 Ok(Instruction::SetUpvalue(arg))
             }
             OPCODE_CLOSE_UPVALUE => Ok(Instruction::CloseUpvalue),
+            OPCODE_CLASS => {
+                let arg = consume_byte(buffer, offset).ok_or(FetchError::Broken)?;
+                Ok(Instruction::Class(arg))
+            }
             x => Err(FetchError::Unknown(x)),
         }
     }
@@ -276,6 +283,7 @@ mod tests {
             ([OPCODE_CLOSURE, 34], Instruction::Closure(34)),
             ([OPCODE_GET_UPVALUE, 160], Instruction::GetUpvalue(160)),
             ([OPCODE_SET_UPVALUE, 219], Instruction::SetUpvalue(219)),
+            ([OPCODE_CLASS, 146], Instruction::Class(146)),
         ];
         for (inp, exp) in data.iter() {
             let mut offset = 0;

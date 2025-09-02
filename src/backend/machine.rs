@@ -166,9 +166,16 @@ impl Machine {
                     self.close_upvalues(self.stack.len() - 1)?;
                     self.stack_pop()?;
                 }
+                Instruction::Class(index) => self.push_class(index)?,
             }
         }
         Ok(())
+    }
+
+    fn push_class(&mut self, index: u8) -> MachineResult<()> {
+        let name = self.read_const_string(index)?;
+        let class = Class::new(name.clone());
+        self.stack_push(Value::Class(Rc::new(class)))
     }
 
     fn compose_closure(&mut self, index: u8) -> MachineResult<()> {

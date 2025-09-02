@@ -1,6 +1,6 @@
 use std::{fmt::Display, num::ParseFloatError, rc::Rc};
 
-use crate::{Closure, Func, NativeFn, NativeFunc};
+use crate::{Class, Closure, Func, NativeFn, NativeFunc};
 
 pub type Double = f32;
 
@@ -13,6 +13,7 @@ pub enum Value {
     Fun(Rc<Func>),
     NativeFun(Rc<NativeFunc>),
     Closure(Rc<Closure>),
+    Class(Rc<Class>),
 }
 
 impl Default for Value {
@@ -30,6 +31,7 @@ impl PartialEq for Value {
             (Self::Fun(l), Self::Fun(r)) => Rc::ptr_eq(l, r),
             (Self::NativeFun(l), Self::NativeFun(r)) => Rc::ptr_eq(l, r),
             (Self::Closure(l), Self::Closure(r)) => Rc::ptr_eq(l, r),
+            (Self::Class(l), Self::Class(r)) => Rc::ptr_eq(l, r),
             _ => false,
         }
     }
@@ -45,6 +47,7 @@ impl Display for Value {
             Value::Fun(val) => write!(f, "{val}"),
             Value::NativeFun(val) => write!(f, "{val}"),
             Value::Closure(val) => write!(f, "{}", val.func()),
+            Value::Class(val) => write!(f, "{val}"),
         }
     }
 }
