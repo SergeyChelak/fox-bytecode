@@ -467,14 +467,30 @@ impl Assembler {
 impl Assembler {
     fn class_declaration(&mut self) {
         self.consume(TokenType::Identifier, "Expect class name");
-        let idx = self.identifier_constant(self.previous.clone());
+        let class_name = self.prev_token_owned();
+        let idx = self.identifier_constant(self.prev_token_owned());
         self.declare_variable();
 
         self.emit_instruction(&Instruction::Class(idx));
         self.define_variable(idx);
 
+        self.named_variable(class_name, false);
         self.consume(TokenType::LeftBrace, "Expect '{' before class body");
+        while !self.check(TokenType::RightBrace) && !self.check(TokenType::Eof) {
+            self.method();
+        }
         self.consume(TokenType::RightBrace, "Expect '}' after class body");
+        self.emit_instruction(&Instruction::Pop);
+    }
+
+    fn method(&mut self) {
+        self.consume(TokenType::Identifier, "Expect method name");
+        let idx = self.identifier_constant(self.prev_token_owned());
+
+        let func_type = FuncType::Function;
+        self.function(func_type);
+
+        self.emit_instruction(&Instruction::Method(idx));
     }
 }
 

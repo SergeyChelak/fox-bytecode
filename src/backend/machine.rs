@@ -170,6 +170,7 @@ impl Machine {
                 Instruction::Class(index) => self.push_class(index)?,
                 Instruction::GetProperty(index) => self.get_class_property(index)?,
                 Instruction::SetProperty(index) => self.set_class_property(index)?,
+                Instruction::Method(_index) => todo!("Instruction 'Method' not implemented"),
             }
         }
         Ok(())
