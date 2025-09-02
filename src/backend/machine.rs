@@ -103,9 +103,10 @@ impl Machine {
                 }
                 Instruction::Return => {
                     let result = self.stack_pop()?;
-                    let Some(frame) = self.frames.pop() else {
-                        return Err(MachineError::with_str("Bug: return on empty call frame"));
-                    };
+                    let frame = self
+                        .frames
+                        .pop()
+                        .ok_or(MachineError::with_str("Bug: return on empty call frame"))?;
 
                     if self.frames.is_empty() {
                         self.stack_pop()?;
