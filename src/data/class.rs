@@ -1,4 +1,6 @@
-use std::{fmt::Display, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, fmt::Display, rc::Rc};
+
+use crate::Value;
 
 #[derive(Debug)]
 pub struct Class {
@@ -19,5 +21,21 @@ impl Display for Class {
 
 #[derive(Debug)]
 pub struct Instance {
-    //
+    class: Rc<Class>,
+    fields: RefCell<HashMap<Rc<String>, Value>>,
+}
+
+impl Instance {
+    pub fn new(class: Rc<Class>) -> Self {
+        Self {
+            class,
+            fields: Default::default(),
+        }
+    }
+}
+
+impl Display for Instance {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "<{} instance>", self.class.name)
+    }
 }

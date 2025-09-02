@@ -394,12 +394,13 @@ impl Machine {
         match value {
             Value::Closure(callee) => self.call(callee, arg_count),
             Value::NativeFun(callee) => self.call_native(callee, arg_count),
+            Value::Class(callee) => self.instantiate_class(callee, arg_count),
             _ => Err(self.runtime_error("Can only call functions and classes")),
         }
     }
 
-    fn call(&mut self, closure: Rc<Closure>, arg_count: usize) -> MachineResult<()> {
-        let arity = closure.func().arity;
+    fn call(&mut self, callee: Rc<Closure>, arg_count: usize) -> MachineResult<()> {
+        let arity = callee.func().arity;
         if arg_count != arity {
             let message = format!("Expected {} arguments but got {}", arity, arg_count);
             return Err(self.runtime_error(message));
@@ -407,16 +408,23 @@ impl Machine {
         if self.frames.len() == FRAMES_MAX {
             return Err(self.runtime_error("Stack overflow"));
         }
-        self.unchecked_call(closure, arg_count);
+        self.unchecked_call(callee, arg_count);
         Ok(())
     }
 
-    fn call_native(&mut self, native_ref: Rc<NativeFunc>, arg_count: usize) -> MachineResult<()> {
+    fn call_native(&mut self, callee: Rc<NativeFunc>, arg_count: usize) -> MachineResult<()> {
         let len = self.stack.len();
         let args = &self.stack[len - arg_count..];
-        let result = native_ref.call(args);
+        let result = callee.call(args);
         self.stack.truncate(len - arg_count);
         self.stack_push(result)
+    }
+
+    fn instantiate_class(&mut self, callee: Rc<Class>, arg_count: usize) -> MachineResult<()> {
+        let len = self.stack.len();
+        let instance = Instance::new(callee);
+        self.stack[len - arg_count - 1] = Value::Instance(Rc::new(instance));
+        Ok(())
     }
 
     fn define_native<T: AsRef<str>>(&mut self, name: T, func: NativeFn) {

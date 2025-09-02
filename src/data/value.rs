@@ -1,6 +1,6 @@
 use std::{fmt::Display, num::ParseFloatError, rc::Rc};
 
-use crate::{Class, Closure, Func, NativeFn, NativeFunc};
+use crate::{Class, Closure, Func, Instance, NativeFn, NativeFunc};
 
 pub type Double = f32;
 
@@ -14,6 +14,7 @@ pub enum Value {
     NativeFun(Rc<NativeFunc>),
     Closure(Rc<Closure>),
     Class(Rc<Class>),
+    Instance(Rc<Instance>),
 }
 
 impl Default for Value {
@@ -48,6 +49,7 @@ impl Display for Value {
             Value::NativeFun(val) => write!(f, "{val}"),
             Value::Closure(val) => write!(f, "{}", val.func()),
             Value::Class(val) => write!(f, "{val}"),
+            Value::Instance(val) => write!(f, "{val}"),
         }
     }
 }
