@@ -32,6 +32,14 @@ impl Instance {
             fields: Default::default(),
         }
     }
+
+    pub fn get_field(&self, name: Rc<String>) -> Option<Value> {
+        self.fields.borrow().get(&name).cloned()
+    }
+
+    pub fn set_field(&self, name: Rc<String>, v: Value) {
+        self.fields.borrow_mut().insert(name, v);
+    }
 }
 
 impl Display for Instance {

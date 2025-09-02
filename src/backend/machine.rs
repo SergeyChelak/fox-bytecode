@@ -167,6 +167,8 @@ impl Machine {
                     self.stack_pop()?;
                 }
                 Instruction::Class(index) => self.push_class(index)?,
+                Instruction::GetProperty(index) => self.get_class_property(index)?,
+                Instruction::SetProperty(index) => self.set_class_property(index)?,
             }
         }
         Ok(())
@@ -180,17 +182,16 @@ impl Machine {
 
     fn compose_closure(&mut self, index: u8) -> MachineResult<()> {
         let val = self.read_const(index)?;
-        let Some(func) = &val.as_function() else {
-            return Err(MachineError::with_str(
-                "Bug: closure refers to non-function constant",
-            ));
-        };
+        let func = val.as_function().ok_or(MachineError::with_str(
+            "Bug: closure refers to non-function constant",
+        ))?;
         let mut closure = Closure::new(func.clone());
         let count = closure.upvalues_count();
         for i in 0..count {
-            let Some(data) = self.frame_mut()?.fetch_upvalue_data() else {
-                return Err(MachineError::with_str("Bug: missing upvalue"));
-            };
+            let data = self
+                .frame_mut()?
+                .fetch_upvalue_data()
+                .ok_or(MachineError::with_str("Bug: missing upvalue"))?;
             let upvalue = if data.is_local {
                 self.capture_upvalue(data.index)?
             } else {
@@ -310,6 +311,33 @@ impl Machine {
         let value = self.stack_peek()?;
         self.globals.insert(name, value);
         Ok(())
+    }
+
+    fn get_class_property(&mut self, index: u8) -> MachineResult<()> {
+        let instance = self
+            .stack_peek()?
+            .as_instance()
+            .ok_or(MachineError::with_str("Only instances have fields"))?;
+        let name = self.read_const_string(index)?;
+        let Some(value) = instance.get_field(name.clone()) else {
+            let msg = format!("Undefined property '{name}'");
+            return Err(MachineError::with_str(&msg));
+        };
+
+        _ = self.stack_pop()?; // instance
+        self.stack_push(value)
+    }
+
+    fn set_class_property(&mut self, index: u8) -> MachineResult<()> {
+        let instance = self
+            .stack_peek_at(1)?
+            .as_instance()
+            .ok_or(MachineError::with_str("Only instances have fields"))?;
+        let name = self.read_const_string(index)?;
+        let value = self.stack_pop()?;
+        instance.set_field(name, value.clone());
+        _ = self.stack_pop()?;
+        self.stack_push(value)
     }
 
     fn read_const_string(&self, index: u8) -> MachineResult<Rc<String>> {

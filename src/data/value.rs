@@ -104,6 +104,13 @@ impl Value {
             _ => true,
         }
     }
+
+    pub fn as_instance(&self) -> Option<Rc<Instance>> {
+        match self {
+            Value::Instance(value) => Some(value.clone()),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Debug, PartialEq)]

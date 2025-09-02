@@ -242,6 +242,7 @@ impl Assembler {
             Identifier => ParseRule::new(Some(Self::variable), None, Precedence::None),
             And => ParseRule::new(None, Some(Self::and), Precedence::And),
             Or => ParseRule::new(None, Some(Self::or), Precedence::Or),
+            Dot => ParseRule::new(None, Some(Self::dot), Precedence::Call),
             _ => Default::default(),
         }
     }
@@ -295,6 +296,18 @@ impl Assembler {
             x => unreachable!("Unexpected binary operator {x:?}"),
         };
         self.emit_instructions(array);
+    }
+
+    fn dot(&mut self, can_assign: bool) {
+        self.consume(TokenType::Identifier, "Expect property name after '.'");
+        let name = self.identifier_constant(self.previous.clone());
+
+        if can_assign && self.is_match(TokenType::Equal) {
+            self.expression();
+            self.emit_instruction(&Instruction::SetProperty(name));
+        } else {
+            self.emit_instruction(&Instruction::GetProperty(name));
+        }
     }
 
     fn grouping(&mut self, _can_assign: bool) {
