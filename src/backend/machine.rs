@@ -36,14 +36,8 @@ impl Machine {
         });
         // prepare to start
         let func_ref = Rc::new(func);
-        {
-            let func_val = Value::Fun(func_ref.clone());
-            _ = vm.stack_push(func_val);
-        }
-
         let closure = Closure::new(func_ref);
         let closure_ref = Rc::new(closure);
-        _ = vm.stack_pop();
         _ = vm.stack_push(Value::Closure(closure_ref.clone()));
         vm.unchecked_call(closure_ref, 0);
         vm
