@@ -118,6 +118,7 @@ impl Machine {
                         break 'run_loop;
                     }
 
+                    self.close_upvalues(frame.frame_start())?;
                     self.stack.truncate(frame.frame_start());
                     self.stack_push(result)?;
                 }
@@ -201,7 +202,7 @@ impl Machine {
     }
 
     fn capture_upvalue(&mut self, index: u8) -> MachineResult<Shared<Upvalue>> {
-        let index = index as usize;
+        let index = self.frame()?.frame_start() + index as usize;
 
         let mut position: Option<usize> = None;
         for (i, val) in self.open_upvalues.iter().enumerate() {
@@ -361,7 +362,9 @@ impl Machine {
         self.stack
             .get(index)
             .cloned()
-            .ok_or(MachineError::with_str("Bug: invalid stack index"))
+            .ok_or(MachineError::with_str(&format!(
+                "Bug: invalid stack index ({index})"
+            )))
     }
 
     fn stack_peek_at(&self, rev_index: usize) -> MachineResult<Value> {
