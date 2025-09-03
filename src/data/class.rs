@@ -77,9 +77,9 @@ impl Instance {
         self.class.clone()
     }
 
-    pub fn get_field(&self, name: Rc<String>) -> Option<Value> {
+    pub fn get_field(&self, name: &Rc<String>) -> Option<Value> {
         // TODO: replace with try_borrow
-        self.fields.borrow().get(&name).cloned()
+        self.fields.borrow().get(name).cloned()
     }
 
     pub fn set_field(&self, name: Rc<String>, v: Value) {

@@ -309,6 +309,9 @@ impl Assembler {
         if can_assign && self.is_match(TokenType::Equal) {
             self.expression();
             self.emit_instruction(&Instruction::SetProperty(name));
+        } else if self.is_match(TokenType::LeftParenthesis) {
+            let args = self.argument_list();
+            self.emit_instruction(&Instruction::Invoke(name, args as u8));
         } else {
             self.emit_instruction(&Instruction::GetProperty(name));
         }

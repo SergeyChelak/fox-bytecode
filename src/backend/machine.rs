@@ -110,6 +110,7 @@ impl Machine {
                 Instruction::GetProperty(index) => self.get_class_property(index)?,
                 Instruction::SetProperty(index) => self.set_class_property(index)?,
                 Instruction::Method(index) => self.op_method(index)?,
+                Instruction::Invoke(name, arg_count) => self.op_invoke(name, arg_count)?,
             }
         }
         Ok(())
@@ -191,6 +192,41 @@ impl Machine {
 
 /// Function/calls
 impl Machine {
+    fn op_invoke(&mut self, name: u8, arg_count: u8) -> MachineResult<()> {
+        let method = self.read_const_string(name)?;
+        self.invoke(method, arg_count)?;
+        Ok(())
+    }
+
+    fn invoke(&mut self, method: Rc<String>, arg_count: u8) -> MachineResult<()> {
+        let arg_count = arg_count as usize;
+        let receiver = self.stack_peek_at(arg_count)?;
+        let instance = receiver
+            .as_instance()
+            .ok_or(MachineError::with_str("Only instances have methods"))?;
+
+        if let Some(value) = instance.get_field(&method) {
+            let len = self.stack.len();
+            self.stack[len - arg_count - 1] = value.clone();
+            return self.call_value(value, arg_count);
+        }
+
+        self.invoke_class(instance.class(), method, arg_count)
+    }
+
+    fn invoke_class(
+        &mut self,
+        class: Rc<Class>,
+        name: Rc<String>,
+        arg_count: usize,
+    ) -> MachineResult<()> {
+        let Some(method) = class.get_method(&name) else {
+            let message = format!("Undefined property '{}'", arg_count);
+            return Err(MachineError::with_str(&message));
+        };
+        self.call_value(method, arg_count)
+    }
+
     fn op_call(&mut self, arg_count: u8) -> MachineResult<()> {
         let arg_count = arg_count as usize;
         let value = self.stack_peek_at(arg_count)?;
@@ -348,7 +384,7 @@ impl Machine {
             .as_instance()
             .ok_or(MachineError::with_str("Only instances have fields"))?;
         let name = self.read_const_string(index)?;
-        if let Some(value) = instance.get_field(name.clone()) {
+        if let Some(value) = instance.get_field(&name) {
             _ = self.stack_pop()?; // instance
             self.stack_push(value)?;
             return Ok(());

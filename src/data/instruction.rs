@@ -36,6 +36,7 @@ pub const OPCODE_CLASS: u8 = 30;
 pub const OPCODE_GET_PROPERTY: u8 = 31;
 pub const OPCODE_SET_PROPERTY: u8 = 32;
 pub const OPCODE_METHOD: u8 = 33;
+pub const OPCODE_INVOKE: u8 = 34;
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Instruction {
@@ -73,6 +74,7 @@ pub enum Instruction {
     GetProperty(u8),
     SetProperty(u8),
     Method(u8),
+    Invoke(u8, u8),
 }
 
 impl Instruction {
@@ -143,6 +145,7 @@ impl Instruction {
             Instruction::GetProperty(val) => vec![OPCODE_GET_PROPERTY, *val],
             Instruction::SetProperty(val) => vec![OPCODE_SET_PROPERTY, *val],
             Instruction::Method(val) => vec![OPCODE_METHOD, *val],
+            Instruction::Invoke(name, args) => vec![OPCODE_INVOKE, *name, *args],
         }
     }
 
@@ -246,6 +249,11 @@ impl Instruction {
                 let arg = consume_byte(buffer, offset).ok_or(FetchError::Broken)?;
                 Ok(Instruction::Method(arg))
             }
+            OPCODE_INVOKE => {
+                let name = consume_byte(buffer, offset).ok_or(FetchError::Broken)?;
+                let args = consume_byte(buffer, offset).ok_or(FetchError::Broken)?;
+                Ok(Instruction::Invoke(name, args))
+            }
             x => Err(FetchError::Unknown(x)),
         }
     }
@@ -327,6 +335,7 @@ mod tests {
             ),
             ([OPCODE_JUMP, 16, 103], Instruction::Jump(16, 103)),
             ([OPCODE_LOOP, 74, 38], Instruction::Loop(74, 38)),
+            ([OPCODE_INVOKE, 39, 72], Instruction::Invoke(39, 72)),
         ];
         for (inp, exp) in data.iter() {
             let mut offset = 0;
