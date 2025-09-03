@@ -99,3 +99,25 @@ fn calling_methods_test() {
     assert_eq!(None, probe.borrow().top_error_message());
     probe.borrow().assert_output_match(output);
 }
+
+#[test]
+fn class_this_nested_test() {
+    let src = r#"
+        class Nested {
+          method() {
+            fun function() {
+              print this;
+            }
+
+            function();
+          }
+        }
+
+        Nested().method();
+        print "OK";
+    "#;
+    let probe = interpret_using_probe(src);
+    let output = &["<Nested instance>", "OK"];
+    assert_eq!(None, probe.borrow().top_error_message());
+    probe.borrow().assert_output_match(output);
+}

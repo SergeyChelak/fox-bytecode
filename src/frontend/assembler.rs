@@ -243,6 +243,7 @@ impl Assembler {
             And => ParseRule::new(None, Some(Self::and), Precedence::And),
             Or => ParseRule::new(None, Some(Self::or), Precedence::Or),
             Dot => ParseRule::new(None, Some(Self::dot), Precedence::Call),
+            This => ParseRule::new(Some(Self::this), None, Precedence::None),
             _ => Default::default(),
         }
     }
@@ -346,6 +347,10 @@ impl Assembler {
         let s = self.prev_token_text();
         let text = &s[1..s.len() - 1];
         self.emit_constant(Value::text_from_str(text));
+    }
+
+    fn this(&mut self, _can_assign: bool) {
+        self.variable(false);
     }
 
     fn unary(&mut self, _can_assign: bool) {
@@ -487,7 +492,7 @@ impl Assembler {
         self.consume(TokenType::Identifier, "Expect method name");
         let idx = self.identifier_constant(self.prev_token_owned());
 
-        let func_type = FuncType::Function;
+        let func_type = FuncType::Method;
         self.function(func_type);
 
         self.emit_instruction(&Instruction::Method(idx));

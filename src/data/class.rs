@@ -47,6 +47,10 @@ impl BoundMethod {
     pub fn closure(&self) -> Rc<Closure> {
         self.method.clone()
     }
+
+    pub fn receiver_owned(&self) -> Value {
+        self.receiver.clone()
+    }
 }
 
 impl Display for BoundMethod {

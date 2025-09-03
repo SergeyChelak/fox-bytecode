@@ -88,6 +88,7 @@ impl Display for Func {
 pub enum FuncType {
     Script,
     Function,
+    Method,
 }
 
 pub type NativeFn = fn(&[Value]) -> Value;

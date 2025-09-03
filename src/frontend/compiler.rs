@@ -20,7 +20,7 @@ impl Compiler {
         Self {
             func: Default::default(),
             func_type,
-            locals: vec![Local::reserved()],
+            locals: vec![Local::reserved(func_type)],
             depth: Default::default(),
             upvalues: [Default::default(); UINT8_COUNT],
             enclosing,
@@ -242,9 +242,14 @@ impl Local {
         }
     }
 
-    fn reserved() -> Self {
+    fn reserved(func_type: FuncType) -> Self {
+        let name = match func_type {
+            FuncType::Method => "this",
+            _ => "",
+        };
+
         Self {
-            name: "".to_string(),
+            name: name.to_string(),
             depth: Some(0),
             is_captured: false,
         }

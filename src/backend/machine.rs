@@ -199,7 +199,7 @@ impl Machine {
         match value {
             Value::Closure(callee) => self.call_closure(callee, arg_count),
             Value::NativeFun(callee) => self.call_native(callee, arg_count),
-            Value::Class(callee) => self.instantiate_class(callee, arg_count),
+            Value::Class(callee) => self.call_class(callee, arg_count),
             Value::BoundMethod(callee) => self.call_bound_method(callee, arg_count),
             _ => Err(self.runtime_error("Can only call functions and classes")),
         }
@@ -211,7 +211,16 @@ impl Machine {
         arg_count: usize,
     ) -> MachineResult<()> {
         let closure = callee.closure();
+        let len = self.stack.len();
+        self.stack[len - arg_count - 1] = callee.receiver_owned();
         self.call_closure(closure, arg_count)
+    }
+
+    fn call_class(&mut self, callee: Rc<Class>, arg_count: usize) -> MachineResult<()> {
+        let len = self.stack.len();
+        let instance = Instance::new(callee);
+        self.stack[len - arg_count - 1] = Value::Instance(Rc::new(instance));
+        Ok(())
     }
 
     fn call_closure(&mut self, callee: Rc<Closure>, arg_count: usize) -> MachineResult<()> {
@@ -301,13 +310,6 @@ impl Machine {
 
 /// Classes
 impl Machine {
-    fn instantiate_class(&mut self, callee: Rc<Class>, arg_count: usize) -> MachineResult<()> {
-        let len = self.stack.len();
-        let instance = Instance::new(callee);
-        self.stack[len - arg_count - 1] = Value::Instance(Rc::new(instance));
-        Ok(())
-    }
-
     fn op_class(&mut self, index: u8) -> MachineResult<()> {
         let name = self.read_const_string(index)?;
         let class = Class::new(name.clone());
