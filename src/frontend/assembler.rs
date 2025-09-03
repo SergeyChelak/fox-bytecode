@@ -12,6 +12,7 @@ use crate::{
 };
 
 type ParseRule = super::rule::ParseRule<Assembler>;
+type ClassCompiler = ();
 
 pub struct Assembler {
     current: Token,
@@ -21,6 +22,7 @@ pub struct Assembler {
     panic_mode: bool,
     errors: Vec<ErrorInfo>,
     loop_stack: Vec<LoopData>,
+    class_compilers: Vec<ClassCompiler>,
 }
 
 impl Assembler {
@@ -33,6 +35,7 @@ impl Assembler {
             panic_mode: false,
             errors: Vec::new(),
             loop_stack: Vec::new(),
+            class_compilers: Vec::new(),
         }
     }
 
@@ -350,6 +353,10 @@ impl Assembler {
     }
 
     fn this(&mut self, _can_assign: bool) {
+        if self.class_compilers.is_empty() {
+            self.error("Can't use 'this' outside of a class");
+            return;
+        }
         self.variable(false);
     }
 
@@ -479,6 +486,8 @@ impl Assembler {
         self.emit_instruction(&Instruction::Class(idx));
         self.define_variable(idx);
 
+        self.class_compilers.push(());
+
         self.named_variable(class_name, false);
         self.consume(TokenType::LeftBrace, "Expect '{' before class body");
         while !self.check(TokenType::RightBrace) && !self.check(TokenType::Eof) {
@@ -486,6 +495,8 @@ impl Assembler {
         }
         self.consume(TokenType::RightBrace, "Expect '}' after class body");
         self.emit_instruction(&Instruction::Pop);
+
+        self.class_compilers.pop();
     }
 
     fn method(&mut self) {

@@ -121,3 +121,29 @@ fn class_this_nested_test() {
     assert_eq!(None, probe.borrow().top_error_message());
     probe.borrow().assert_output_match(output);
 }
+
+#[test]
+fn misuse_this_at_top_level_test() {
+    let src = r#"
+        print this; // At top level.
+    "#;
+    let probe = interpret_using_probe(src);
+    assert_eq!(
+        Some("Can't use 'this' outside of a class"),
+        probe.borrow().top_error_message()
+    );
+}
+
+#[test]
+fn misuse_this_in_function_test() {
+    let src = r#"
+        fun notMethod() {
+          print this; // In a function.
+        }
+    "#;
+    let probe = interpret_using_probe(src);
+    assert_eq!(
+        Some("Can't use 'this' outside of a class"),
+        probe.borrow().top_error_message()
+    );
+}
