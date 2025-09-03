@@ -80,3 +80,22 @@ fn class_non_class_set_test() {
         probe.borrow().top_error_message()
     );
 }
+
+#[test]
+fn calling_methods_test() {
+    let src = r#"
+        class Scone {
+          topping(first, second) {
+            print "scone with " + first + " and " + second;
+          }
+        }
+
+        var scone = Scone();
+        scone.topping("berries", "cream");
+        print "OK";
+    "#;
+    let probe = interpret_using_probe(src);
+    let output = &["scone with berries and cream", "OK"];
+    assert_eq!(None, probe.borrow().top_error_message());
+    probe.borrow().assert_output_match(output);
+}

@@ -200,8 +200,18 @@ impl Machine {
             Value::Closure(callee) => self.call_closure(callee, arg_count),
             Value::NativeFun(callee) => self.call_native(callee, arg_count),
             Value::Class(callee) => self.instantiate_class(callee, arg_count),
+            Value::BoundMethod(callee) => self.call_bound_method(callee, arg_count),
             _ => Err(self.runtime_error("Can only call functions and classes")),
         }
+    }
+
+    fn call_bound_method(
+        &mut self,
+        callee: Rc<BoundMethod>,
+        arg_count: usize,
+    ) -> MachineResult<()> {
+        let closure = callee.closure();
+        self.call_closure(closure, arg_count)
     }
 
     fn call_closure(&mut self, callee: Rc<Closure>, arg_count: usize) -> MachineResult<()> {
