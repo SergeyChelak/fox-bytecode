@@ -14,6 +14,7 @@ use crate::{
 
 const FRAMES_MAX: usize = 64;
 const STACK_MAX_SIZE: usize = FRAMES_MAX * UINT8_COUNT;
+const INITIALIZER_METHOD_NAME: &str = "init";
 
 pub struct Machine {
     frames: Vec<CallFrame>,
@@ -21,6 +22,7 @@ pub struct Machine {
     globals: HashMap<Rc<String>, Value>,
     service: Shared<dyn BackendService>,
     open_upvalues: LinkedList<Shared<Upvalue>>,
+    init_method: Rc<String>,
 }
 
 impl Machine {
@@ -50,6 +52,7 @@ impl Machine {
             globals: HashMap::new(),
             service,
             open_upvalues: Default::default(),
+            init_method: Rc::new(INITIALIZER_METHOD_NAME.to_string()),
         }
     }
 
@@ -218,8 +221,16 @@ impl Machine {
 
     fn call_class(&mut self, callee: Rc<Class>, arg_count: usize) -> MachineResult<()> {
         let len = self.stack.len();
-        let instance = Instance::new(callee);
-        self.stack[len - arg_count - 1] = Value::Instance(Rc::new(instance));
+        let instance = Rc::new(Instance::new(callee));
+        self.stack[len - arg_count - 1] = Value::Instance(instance.clone());
+
+        let class = instance.class();
+        if let Some(initializer) = class.get_method(&self.init_method) {
+            return self.call_value(initializer, arg_count);
+        } else if arg_count > 0 {
+            let message = format!("Expected 0 arguments but got {arg_count}");
+            return Err(self.runtime_error(message));
+        }
         Ok(())
     }
 

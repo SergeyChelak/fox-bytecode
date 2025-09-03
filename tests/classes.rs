@@ -147,3 +147,96 @@ fn misuse_this_in_function_test() {
         probe.borrow().top_error_message()
     );
 }
+
+#[test]
+fn class_initializer_test() {
+    let src = r#"
+        class Class {
+          init() {
+            print "Initialized";
+          }
+        }
+
+        var x = Class();
+        print "OK";
+    "#;
+    let probe = interpret_using_probe(src);
+    let output = &["Initialized", "OK"];
+    assert_eq!(None, probe.borrow().top_error_message());
+    probe.borrow().assert_output_match(output);
+}
+
+// #[test]
+fn _class_initializer_with_args_test() {
+    let src = r#"
+        class Class {
+          init(a) {
+            this.value = a;
+            // return this;
+          }
+        }
+
+        var x = Class("hello");
+        print x.value;
+        print "OK";
+    "#;
+    let probe = interpret_using_probe(src);
+    let output = &["hello", "OK"];
+    assert_eq!(None, probe.borrow().top_error_message());
+    probe.borrow().assert_output_match(output);
+}
+
+#[test]
+fn class_initializer_with_wrong_args_test() {
+    let src = r#"
+        class Class {
+          init(a, b, c) {
+            print a + b + c;
+          }
+        }
+
+        Class("hello");
+    "#;
+    let probe = interpret_using_probe(src);
+    assert_eq!(
+        Some("Expected 3 arguments but got 1"),
+        probe.borrow().top_error_message()
+    );
+}
+
+#[test]
+fn class_initializer_implicit_test() {
+    let src = r#"
+        class Class {
+          init() {
+            print "ready";
+          }
+        }
+
+        Class();
+        print "OK";
+    "#;
+    let probe = interpret_using_probe(src);
+    let output = &["ready", "OK"];
+    assert_eq!(None, probe.borrow().top_error_message());
+    probe.borrow().assert_output_match(output);
+}
+
+#[test]
+fn class_initializer_invalid_implicit_test() {
+    let src = r#"
+        class Class {
+          init() {
+            print "ready";
+          }
+        }
+
+        Class(1, 2, 3);
+        print "OK";
+    "#;
+    let probe = interpret_using_probe(src);
+    assert_eq!(
+        Some("Expected 0 arguments but got 3"),
+        probe.borrow().top_error_message()
+    );
+}
