@@ -163,16 +163,115 @@ impl Machine {
                 Instruction::Closure(index) => self.compose_closure(index)?,
                 Instruction::GetUpvalue(index) => self.get_upvalue(index)?,
                 Instruction::SetUpvalue(index) => self.set_upvalue(index)?,
-                Instruction::CloseUpvalue => {
-                    self.close_upvalues(self.stack.len() - 1)?;
-                    self.stack_pop()?;
-                }
+                Instruction::CloseUpvalue => self.op_close_upvalue()?,
                 Instruction::Class(index) => self.push_class(index)?,
                 Instruction::GetProperty(index) => self.get_class_property(index)?,
                 Instruction::SetProperty(index) => self.set_class_property(index)?,
-                Instruction::Method(_index) => todo!("Instruction 'Method' not implemented"),
+                Instruction::Method(index) => self.op_method(index)?,
             }
         }
+        Ok(())
+    }
+
+    fn do_binary(&mut self, operation: ValueOperation) -> MachineResult<()> {
+        let b = self.stack_pop()?;
+        let a = self.stack_pop()?;
+        match operation(&a, &b) {
+            Ok(value) => {
+                self.stack.push(value);
+                Ok(())
+            }
+            Err(OperationError::TypeMismatch) => {
+                Err(self.runtime_error("Invalid/incompatible operands type"))
+            }
+            Err(OperationError::DivisionByZero) => Err(self.runtime_error("Division by zeros")),
+        }
+    }
+
+    fn call_value(&mut self, value: Value, arg_count: usize) -> MachineResult<()> {
+        match value {
+            Value::Closure(callee) => self.call(callee, arg_count),
+            Value::NativeFun(callee) => self.call_native(callee, arg_count),
+            Value::Class(callee) => self.instantiate_class(callee, arg_count),
+            _ => Err(self.runtime_error("Can only call functions and classes")),
+        }
+    }
+
+    fn call(&mut self, callee: Rc<Closure>, arg_count: usize) -> MachineResult<()> {
+        let arity = callee.func().arity;
+        if arg_count != arity {
+            let message = format!("Expected {} arguments but got {}", arity, arg_count);
+            return Err(self.runtime_error(message));
+        }
+        if self.frames.len() == FRAMES_MAX {
+            return Err(self.runtime_error("Stack overflow"));
+        }
+        self.unchecked_call(callee, arg_count);
+        Ok(())
+    }
+
+    fn call_native(&mut self, callee: Rc<NativeFunc>, arg_count: usize) -> MachineResult<()> {
+        let len = self.stack.len();
+        let args = &self.stack[len - arg_count..];
+        let result = callee.call(args);
+        self.stack.truncate(len - arg_count);
+        self.stack_push(result)
+    }
+
+    fn define_native<T: AsRef<str>>(&mut self, name: T, func: NativeFn) {
+        let value = Value::native_func(func);
+        self.globals
+            .insert(Rc::new(name.as_ref().to_string()), value);
+    }
+
+    fn unchecked_call(&mut self, closure: Rc<Closure>, arg_count: usize) {
+        let frame_start = self.stack.len() - arg_count - 1;
+        let frame = CallFrame::new(closure, frame_start);
+        self.frames.push(frame);
+    }
+
+    fn relative_to_absolute_slot(&self, relative_slot: u8) -> MachineResult<usize> {
+        let start = self.frame()?.frame_start();
+        Ok(start + relative_slot as usize)
+    }
+}
+
+/// Variables
+impl Machine {
+    fn define_global(&mut self, index: u8) -> MachineResult<()> {
+        let name = self.read_const_string(index)?;
+        let value = self.stack_pop()?;
+        self.globals.insert(name, value);
+        Ok(())
+    }
+
+    fn get_global(&mut self, index: u8) -> MachineResult<()> {
+        let name = self.read_const_string(index)?;
+        let Some(value) = self.globals.get(&name).cloned() else {
+            let message = format!("Undefined variable {}", name);
+            return Err(self.runtime_error(message));
+        };
+        self.stack_push(value)
+    }
+
+    fn set_global(&mut self, index: u8) -> MachineResult<()> {
+        let name = self.read_const_string(index)?;
+        if !self.globals.contains_key(&name) {
+            let message = format!("Undefined variable {}", name);
+            return Err(self.runtime_error(message));
+        }
+        let value = self.stack_peek()?;
+        self.globals.insert(name, value);
+        Ok(())
+    }
+}
+
+/// Classes
+impl Machine {
+    fn instantiate_class(&mut self, callee: Rc<Class>, arg_count: usize) -> MachineResult<()> {
+        let len = self.stack.len();
+        let instance = Instance::new(callee);
+        self.stack[len - arg_count - 1] = Value::Instance(Rc::new(instance));
         Ok(())
     }
 
@@ -182,6 +281,45 @@ impl Machine {
         self.stack_push(Value::Class(Rc::new(class)))
     }
 
+    fn op_method(&mut self, index: u8) -> MachineResult<()> {
+        let name = self.read_const_string(index)?;
+        self.define_method(name)
+    }
+
+    fn define_method(&mut self, name: Rc<String>) -> MachineResult<()> {
+        todo!()
+    }
+
+    fn get_class_property(&mut self, index: u8) -> MachineResult<()> {
+        let instance = self
+            .stack_peek()?
+            .as_instance()
+            .ok_or(MachineError::with_str("Only instances have fields"))?;
+        let name = self.read_const_string(index)?;
+        let Some(value) = instance.get_field(name.clone()) else {
+            let msg = format!("Undefined property '{name}'");
+            return Err(MachineError::with_str(&msg));
+        };
+
+        _ = self.stack_pop()?; // instance
+        self.stack_push(value)
+    }
+
+    fn set_class_property(&mut self, index: u8) -> MachineResult<()> {
+        let instance = self
+            .stack_peek_at(1)?
+            .as_instance()
+            .ok_or(MachineError::with_str("Only instances have fields"))?;
+        let name = self.read_const_string(index)?;
+        let value = self.stack_pop()?;
+        instance.set_field(name, value.clone());
+        _ = self.stack_pop()?;
+        self.stack_push(value)
+    }
+}
+
+/// Closures
+impl Machine {
     fn compose_closure(&mut self, index: u8) -> MachineResult<()> {
         let val = self.read_const(index)?;
         let func = val.as_function().ok_or(MachineError::with_str(
@@ -230,6 +368,12 @@ impl Machine {
             self.open_upvalues.push_back(upvalue.clone());
         }
         Ok(upvalue)
+    }
+
+    fn op_close_upvalue(&mut self) -> MachineResult<()> {
+        self.close_upvalues(self.stack.len() - 1)?;
+        self.stack_pop()?;
+        Ok(())
     }
 
     fn close_upvalues(&mut self, last: usize) -> MachineResult<()> {
@@ -287,82 +431,29 @@ impl Machine {
         };
         Ok(())
     }
+}
 
-    fn define_global(&mut self, index: u8) -> MachineResult<()> {
-        let name = self.read_const_string(index)?;
-        let value = self.stack_pop()?;
-        self.globals.insert(name, value);
-        Ok(())
+/// Access & fetch
+impl Machine {
+    fn fetch_instruction(&mut self) -> FetchResult<Instruction> {
+        let frame = self
+            .frame_mut()
+            .map_err(|err| FetchError::Other(err.text))?;
+        frame.fetch_instruction()
     }
 
-    fn get_global(&mut self, index: u8) -> MachineResult<()> {
-        let name = self.read_const_string(index)?;
-        let Some(value) = self.globals.get(&name).cloned() else {
-            let message = format!("Undefined variable {}", name);
-            return Err(self.runtime_error(message));
+    fn frame(&self) -> MachineResult<&CallFrame> {
+        let Some(f) = self.frames.last() else {
+            return Err(MachineError::with_str("Bug: empty call frame"));
         };
-        self.stack_push(value)
+        Ok(f)
     }
 
-    fn set_global(&mut self, index: u8) -> MachineResult<()> {
-        let name = self.read_const_string(index)?;
-        if !self.globals.contains_key(&name) {
-            let message = format!("Undefined variable {}", name);
-            return Err(self.runtime_error(message));
-        }
-        let value = self.stack_peek()?;
-        self.globals.insert(name, value);
-        Ok(())
-    }
-
-    fn get_class_property(&mut self, index: u8) -> MachineResult<()> {
-        let instance = self
-            .stack_peek()?
-            .as_instance()
-            .ok_or(MachineError::with_str("Only instances have fields"))?;
-        let name = self.read_const_string(index)?;
-        let Some(value) = instance.get_field(name.clone()) else {
-            let msg = format!("Undefined property '{name}'");
-            return Err(MachineError::with_str(&msg));
+    fn frame_mut(&mut self) -> MachineResult<&mut CallFrame> {
+        let Some(f) = self.frames.last_mut() else {
+            return Err(MachineError::with_str("Bug: empty call frame"));
         };
-
-        _ = self.stack_pop()?; // instance
-        self.stack_push(value)
-    }
-
-    fn set_class_property(&mut self, index: u8) -> MachineResult<()> {
-        let instance = self
-            .stack_peek_at(1)?
-            .as_instance()
-            .ok_or(MachineError::with_str("Only instances have fields"))?;
-        let name = self.read_const_string(index)?;
-        let value = self.stack_pop()?;
-        instance.set_field(name, value.clone());
-        _ = self.stack_pop()?;
-        self.stack_push(value)
-    }
-
-    fn read_const_string(&self, index: u8) -> MachineResult<Rc<String>> {
-        let name = self.read_const(index)?;
-        let Some(name) = name.as_text() else {
-            return Err(self.runtime_error("Bug: failed to fetch constant"));
-        };
-        Ok(name)
-    }
-
-    fn do_binary(&mut self, operation: ValueOperation) -> MachineResult<()> {
-        let b = self.stack_pop()?;
-        let a = self.stack_pop()?;
-        match operation(&a, &b) {
-            Ok(value) => {
-                self.stack.push(value);
-                Ok(())
-            }
-            Err(OperationError::TypeMismatch) => {
-                Err(self.runtime_error("Invalid/incompatible operands type"))
-            }
-            Err(OperationError::DivisionByZero) => Err(self.runtime_error("Division by zeros")),
-        }
+        Ok(f)
     }
 
     fn read_const(&self, index: u8) -> MachineResult<Value> {
@@ -372,6 +463,17 @@ impl Machine {
         Ok(value)
     }
 
+    fn read_const_string(&self, index: u8) -> MachineResult<Rc<String>> {
+        let name = self.read_const(index)?;
+        let Some(name) = name.as_text() else {
+            return Err(self.runtime_error("Bug: failed to fetch constant"));
+        };
+        Ok(name)
+    }
+}
+
+/// Stack
+impl Machine {
     fn stack_reset(&mut self) {
         self.stack.clear();
         self.frames.clear();
@@ -419,82 +521,19 @@ impl Machine {
         };
         Ok(value)
     }
+}
 
-    fn call_value(&mut self, value: Value, arg_count: usize) -> MachineResult<()> {
-        match value {
-            Value::Closure(callee) => self.call(callee, arg_count),
-            Value::NativeFun(callee) => self.call_native(callee, arg_count),
-            Value::Class(callee) => self.instantiate_class(callee, arg_count),
-            _ => Err(self.runtime_error("Can only call functions and classes")),
-        }
-    }
+fn extract_stack_index(val: &Shared<Upvalue>) -> MachineResult<usize> {
+    let Upvalue::Stack(stack_idx) = *val.borrow().deref() else {
+        return Err(MachineError::with_str(
+            "Bug: open upvalues should be stack allocated",
+        ));
+    };
+    Ok(stack_idx)
+}
 
-    fn call(&mut self, callee: Rc<Closure>, arg_count: usize) -> MachineResult<()> {
-        let arity = callee.func().arity;
-        if arg_count != arity {
-            let message = format!("Expected {} arguments but got {}", arity, arg_count);
-            return Err(self.runtime_error(message));
-        }
-        if self.frames.len() == FRAMES_MAX {
-            return Err(self.runtime_error("Stack overflow"));
-        }
-        self.unchecked_call(callee, arg_count);
-        Ok(())
-    }
-
-    fn call_native(&mut self, callee: Rc<NativeFunc>, arg_count: usize) -> MachineResult<()> {
-        let len = self.stack.len();
-        let args = &self.stack[len - arg_count..];
-        let result = callee.call(args);
-        self.stack.truncate(len - arg_count);
-        self.stack_push(result)
-    }
-
-    fn instantiate_class(&mut self, callee: Rc<Class>, arg_count: usize) -> MachineResult<()> {
-        let len = self.stack.len();
-        let instance = Instance::new(callee);
-        self.stack[len - arg_count - 1] = Value::Instance(Rc::new(instance));
-        Ok(())
-    }
-
-    fn define_native<T: AsRef<str>>(&mut self, name: T, func: NativeFn) {
-        let value = Value::native_func(func);
-        self.globals
-            .insert(Rc::new(name.as_ref().to_string()), value);
-    }
-
-    fn unchecked_call(&mut self, closure: Rc<Closure>, arg_count: usize) {
-        let frame_start = self.stack.len() - arg_count - 1;
-        let frame = CallFrame::new(closure, frame_start);
-        self.frames.push(frame);
-    }
-
-    fn fetch_instruction(&mut self) -> FetchResult<Instruction> {
-        let frame = self
-            .frame_mut()
-            .map_err(|err| FetchError::Other(err.text))?;
-        frame.fetch_instruction()
-    }
-
-    fn frame(&self) -> MachineResult<&CallFrame> {
-        let Some(f) = self.frames.last() else {
-            return Err(MachineError::with_str("Bug: empty call frame"));
-        };
-        Ok(f)
-    }
-
-    fn frame_mut(&mut self) -> MachineResult<&mut CallFrame> {
-        let Some(f) = self.frames.last_mut() else {
-            return Err(MachineError::with_str("Bug: empty call frame"));
-        };
-        Ok(f)
-    }
-
-    fn relative_to_absolute_slot(&self, relative_slot: u8) -> MachineResult<usize> {
-        let start = self.frame()?.frame_start();
-        Ok(start + relative_slot as usize)
-    }
-
+/// Errors
+impl Machine {
     fn runtime_error<T: AsRef<str>>(&self, message: T) -> MachineError {
         let mut line_number: Option<usize> = None;
         if let Ok(frame) = self.frame() {
@@ -519,15 +558,6 @@ impl Machine {
             .collect::<Vec<_>>();
         self.service.borrow_mut().set_stack_trace(stack_trace);
     }
-}
-
-fn extract_stack_index(val: &Shared<Upvalue>) -> MachineResult<usize> {
-    let Upvalue::Stack(stack_idx) = *val.borrow().deref() else {
-        return Err(MachineError::with_str(
-            "Bug: open upvalues should be stack allocated",
-        ));
-    };
-    Ok(stack_idx)
 }
 
 #[cfg(test)]
