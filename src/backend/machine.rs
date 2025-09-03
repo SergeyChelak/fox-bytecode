@@ -58,13 +58,15 @@ impl Machine {
         if let Err(err) = &result {
             self.service.borrow_mut().set_error(err.clone());
             self.flush_track_trace();
-            self.stack_reset();
+            self.stack.clear();
+            self.frames.clear();
         }
         result
     }
 
     fn perform(&mut self) -> MachineResult<()> {
-        'run_loop: loop {
+        let mut is_alive = true;
+        while is_alive {
             let fetch_result = self.fetch_instruction();
             let instr = match fetch_result {
                 Ok(instr) => instr,
@@ -72,99 +74,37 @@ impl Machine {
                 Err(err) => return Err(self.runtime_error(format!("{err}"))),
             };
             match instr {
-                Instruction::Constant(index) => {
-                    let value = self.read_const(index)?;
-                    self.stack_push(value)?;
-                }
-                Instruction::Equal => self.do_binary(Value::equals)?,
-                Instruction::Greater => self.do_binary(Value::greater)?,
-                Instruction::Less => self.do_binary(Value::less)?,
+                Instruction::Constant(index) => self.op_constant(index)?,
+                Instruction::Equal => self.op_binary(Value::equals)?,
+                Instruction::Greater => self.op_binary(Value::greater)?,
+                Instruction::Less => self.op_binary(Value::less)?,
                 Instruction::Nil => self.stack_push(Value::Nil)?,
                 Instruction::True => self.stack_push(Value::Bool(true))?,
                 Instruction::False => self.stack_push(Value::Bool(false))?,
-                Instruction::Add => self.do_binary(Value::add)?,
-                Instruction::Subtract => self.do_binary(Value::subtract)?,
-                Instruction::Multiply => self.do_binary(Value::multiply)?,
-                Instruction::Divide => self.do_binary(Value::divide)?,
-                Instruction::Negate => {
-                    let value = self.stack_pop()?;
-                    let Some(value) = value.as_number() else {
-                        return Err(self.runtime_error("Operand must be a number"));
-                    };
-                    self.stack_push(Value::number(-value))?;
-                }
-                Instruction::Not => {
-                    let value = self.stack_pop()?;
-                    self.stack_push(Value::Bool(!value.as_bool()))?;
-                }
-                Instruction::Print => {
-                    let value = self.stack_pop()?;
-                    self.service.borrow_mut().print_value(value);
-                }
-                Instruction::Return => {
-                    let result = self.stack_pop()?;
-                    let frame = self
-                        .frames
-                        .pop()
-                        .ok_or(MachineError::with_str("Bug: return on empty call frame"))?;
-
-                    if self.frames.is_empty() {
-                        self.stack_pop()?;
-                        break 'run_loop;
-                    }
-
-                    self.close_upvalues(frame.frame_start())?;
-                    self.stack.truncate(frame.frame_start());
-                    self.stack_push(result)?;
-                }
-                Instruction::Pop => {
-                    self.stack_pop()?;
-                }
+                Instruction::Add => self.op_binary(Value::add)?,
+                Instruction::Subtract => self.op_binary(Value::subtract)?,
+                Instruction::Multiply => self.op_binary(Value::multiply)?,
+                Instruction::Divide => self.op_binary(Value::divide)?,
+                Instruction::Negate => self.op_negate()?,
+                Instruction::Not => self.op_not()?,
+                Instruction::Print => self.op_print()?,
+                Instruction::Return => self.op_return(&mut is_alive)?,
+                Instruction::Pop => self.op_pop()?,
                 Instruction::DefineGlobal(index) => self.define_global(index)?,
                 Instruction::GetGlobal(index) => self.get_global(index)?,
                 Instruction::SetGlobal(index) => self.set_global(index)?,
-                Instruction::GetLocal(rel_slot) => {
-                    let slot = self.relative_to_absolute_slot(rel_slot)?;
-                    let Some(value) = self.stack.get(slot).cloned() else {
-                        let msg = format!("Bug: failed to get local value with '{:?}'", instr);
-                        return Err(self.runtime_error(msg));
-                    };
-                    self.stack_push(value)?
-                }
-                Instruction::SetLocal(rel_slot) => {
-                    let value = self.stack_peek()?;
-                    let slot = self.relative_to_absolute_slot(rel_slot)?;
-                    self.stack[slot] = value;
-                }
-                Instruction::JumpIfFalse(first, second) => {
-                    let jump = bytes_to_word(first, second);
-                    let condition = self.stack_peek()?.as_bool();
-                    if !condition {
-                        self.frame_mut()?.ip_inc(jump);
-                    }
-                }
-                Instruction::Jump(first, second) => {
-                    let jump = bytes_to_word(first, second);
-                    self.frame_mut()?.ip_inc(jump);
-                }
-                Instruction::Loop(first, second) => {
-                    let jump = bytes_to_word(first, second);
-                    self.frame_mut()?.ip_dec(jump);
-                }
-                Instruction::Duplicate => {
-                    let value = self.stack_peek()?;
-                    self.stack_push(value)?;
-                }
-                Instruction::Call(arg_count) => {
-                    let arg_count = arg_count as usize;
-                    let value = self.stack_peek_at(arg_count)?;
-                    self.call_value(value, arg_count)?;
-                }
-                Instruction::Closure(index) => self.compose_closure(index)?,
-                Instruction::GetUpvalue(index) => self.get_upvalue(index)?,
-                Instruction::SetUpvalue(index) => self.set_upvalue(index)?,
+                Instruction::GetLocal(rel_slot) => self.op_get_local(rel_slot)?,
+                Instruction::SetLocal(rel_slot) => self.op_set_local(rel_slot)?,
+                Instruction::JumpIfFalse(first, second) => self.op_jump_if_false(first, second)?,
+                Instruction::Jump(first, second) => self.op_jump(first, second)?,
+                Instruction::Loop(first, second) => self.op_loop(first, second)?,
+                Instruction::Duplicate => self.op_duplicate_top()?,
+                Instruction::Call(arg_count) => self.op_call(arg_count)?,
+                Instruction::Closure(index) => self.op_closure(index)?,
+                Instruction::GetUpvalue(index) => self.op_get_upvalue(index)?,
+                Instruction::SetUpvalue(index) => self.op_set_upvalue(index)?,
                 Instruction::CloseUpvalue => self.op_close_upvalue()?,
-                Instruction::Class(index) => self.push_class(index)?,
+                Instruction::Class(index) => self.op_class(index)?,
                 Instruction::GetProperty(index) => self.get_class_property(index)?,
                 Instruction::SetProperty(index) => self.set_class_property(index)?,
                 Instruction::Method(index) => self.op_method(index)?,
@@ -172,8 +112,66 @@ impl Machine {
         }
         Ok(())
     }
+}
 
-    fn do_binary(&mut self, operation: ValueOperation) -> MachineResult<()> {
+/// Jumps
+impl Machine {
+    fn op_return(&mut self, is_alive: &mut bool) -> MachineResult<()> {
+        let result = self.stack_pop()?;
+        let frame = self
+            .frames
+            .pop()
+            .ok_or(MachineError::with_str("Bug: return on empty call frame"))?;
+
+        if self.frames.is_empty() {
+            self.stack_pop()?;
+            *is_alive = false;
+            return Ok(());
+        }
+
+        self.close_upvalues(frame.frame_start())?;
+        self.stack.truncate(frame.frame_start());
+        self.stack_push(result)
+    }
+
+    fn op_loop(&mut self, first: u8, second: u8) -> MachineResult<()> {
+        let jump = bytes_to_word(first, second);
+        self.frame_mut()?.ip_dec(jump);
+        Ok(())
+    }
+
+    fn op_jump(&mut self, first: u8, second: u8) -> MachineResult<()> {
+        let jump = bytes_to_word(first, second);
+        self.frame_mut()?.ip_inc(jump);
+        Ok(())
+    }
+
+    fn op_jump_if_false(&mut self, first: u8, second: u8) -> MachineResult<()> {
+        let jump = bytes_to_word(first, second);
+        let condition = self.stack_peek()?.as_bool();
+        if !condition {
+            self.frame_mut()?.ip_inc(jump);
+        }
+        Ok(())
+    }
+}
+
+/// Math and logical ops
+impl Machine {
+    fn op_not(&mut self) -> MachineResult<()> {
+        let value = self.stack_pop()?;
+        self.stack_push(Value::Bool(!value.as_bool()))
+    }
+
+    fn op_negate(&mut self) -> MachineResult<()> {
+        let value = self.stack_pop()?;
+        let Some(value) = value.as_number() else {
+            return Err(self.runtime_error("Operand must be a number"));
+        };
+        self.stack_push(Value::number(-value))
+    }
+
+    fn op_binary(&mut self, operation: ValueOperation) -> MachineResult<()> {
         let b = self.stack_pop()?;
         let a = self.stack_pop()?;
         match operation(&a, &b) {
@@ -187,17 +185,26 @@ impl Machine {
             Err(OperationError::DivisionByZero) => Err(self.runtime_error("Division by zeros")),
         }
     }
+}
+
+/// Function/calls
+impl Machine {
+    fn op_call(&mut self, arg_count: u8) -> MachineResult<()> {
+        let arg_count = arg_count as usize;
+        let value = self.stack_peek_at(arg_count)?;
+        self.call_value(value, arg_count)
+    }
 
     fn call_value(&mut self, value: Value, arg_count: usize) -> MachineResult<()> {
         match value {
-            Value::Closure(callee) => self.call(callee, arg_count),
+            Value::Closure(callee) => self.call_closure(callee, arg_count),
             Value::NativeFun(callee) => self.call_native(callee, arg_count),
             Value::Class(callee) => self.instantiate_class(callee, arg_count),
             _ => Err(self.runtime_error("Can only call functions and classes")),
         }
     }
 
-    fn call(&mut self, callee: Rc<Closure>, arg_count: usize) -> MachineResult<()> {
+    fn call_closure(&mut self, callee: Rc<Closure>, arg_count: usize) -> MachineResult<()> {
         let arity = callee.func().arity;
         if arg_count != arity {
             let message = format!("Expected {} arguments but got {}", arity, arg_count);
@@ -229,11 +236,6 @@ impl Machine {
         let frame = CallFrame::new(closure, frame_start);
         self.frames.push(frame);
     }
-
-    fn relative_to_absolute_slot(&self, relative_slot: u8) -> MachineResult<usize> {
-        let start = self.frame()?.frame_start();
-        Ok(start + relative_slot as usize)
-    }
 }
 
 /// Variables
@@ -264,6 +266,27 @@ impl Machine {
         self.globals.insert(name, value);
         Ok(())
     }
+
+    fn op_get_local(&mut self, rel_slot: u8) -> MachineResult<()> {
+        let slot = self.relative_to_absolute_slot(rel_slot)?;
+        let Some(value) = self.stack.get(slot).cloned() else {
+            return Err(self.runtime_error("Bug: failed to get local value"));
+        };
+        self.stack_push(value)?;
+        Ok(())
+    }
+
+    fn op_set_local(&mut self, rel_slot: u8) -> MachineResult<()> {
+        let value = self.stack_peek()?;
+        let slot = self.relative_to_absolute_slot(rel_slot)?;
+        self.stack[slot] = value;
+        Ok(())
+    }
+
+    fn relative_to_absolute_slot(&self, relative_slot: u8) -> MachineResult<usize> {
+        let start = self.frame()?.frame_start();
+        Ok(start + relative_slot as usize)
+    }
 }
 
 /// Classes
@@ -275,7 +298,7 @@ impl Machine {
         Ok(())
     }
 
-    fn push_class(&mut self, index: u8) -> MachineResult<()> {
+    fn op_class(&mut self, index: u8) -> MachineResult<()> {
         let name = self.read_const_string(index)?;
         let class = Class::new(name.clone());
         self.stack_push(Value::Class(Rc::new(class)))
@@ -320,7 +343,7 @@ impl Machine {
 
 /// Closures
 impl Machine {
-    fn compose_closure(&mut self, index: u8) -> MachineResult<()> {
+    fn op_closure(&mut self, index: u8) -> MachineResult<()> {
         let val = self.read_const(index)?;
         let func = val.as_function().ok_or(MachineError::with_str(
             "Bug: closure refers to non-function constant",
@@ -396,7 +419,7 @@ impl Machine {
         Ok(())
     }
 
-    fn get_upvalue(&mut self, index: u8) -> MachineResult<()> {
+    fn op_get_upvalue(&mut self, index: u8) -> MachineResult<()> {
         let shared_upvalue = self.frame()?.closure().upvalue(index as usize);
         let upvalue = shared_upvalue
             .try_borrow()
@@ -411,7 +434,7 @@ impl Machine {
         self.stack_push(value)
     }
 
-    fn set_upvalue(&mut self, index: u8) -> MachineResult<()> {
+    fn op_set_upvalue(&mut self, index: u8) -> MachineResult<()> {
         let shared_upvalue = self.frame()?.closure().upvalue(index as usize);
         let upvalue = shared_upvalue
             .try_borrow()
@@ -435,6 +458,11 @@ impl Machine {
 
 /// Access & fetch
 impl Machine {
+    fn op_constant(&mut self, index: u8) -> MachineResult<()> {
+        let value = self.read_const(index)?;
+        self.stack_push(value)
+    }
+
     fn fetch_instruction(&mut self) -> FetchResult<Instruction> {
         let frame = self
             .frame_mut()
@@ -474,9 +502,14 @@ impl Machine {
 
 /// Stack
 impl Machine {
-    fn stack_reset(&mut self) {
-        self.stack.clear();
-        self.frames.clear();
+    fn op_duplicate_top(&mut self) -> MachineResult<()> {
+        let value = self.stack_peek()?;
+        self.stack_push(value)
+    }
+
+    fn op_pop(&mut self) -> MachineResult<()> {
+        self.stack_pop()?;
+        Ok(())
     }
 
     fn stack_push(&mut self, value: Value) -> MachineResult<()> {
@@ -532,8 +565,14 @@ fn extract_stack_index(val: &Shared<Upvalue>) -> MachineResult<usize> {
     Ok(stack_idx)
 }
 
-/// Errors
+/// Errors & utils
 impl Machine {
+    fn op_print(&mut self) -> MachineResult<()> {
+        let value = self.stack_pop()?;
+        self.service.borrow_mut().print_value(value);
+        Ok(())
+    }
+
     fn runtime_error<T: AsRef<str>>(&self, message: T) -> MachineError {
         let mut line_number: Option<usize> = None;
         if let Ok(frame) = self.frame() {
@@ -573,6 +612,27 @@ pub mod tests {
         let mut chunk = Chunk::new();
         chunk.write_u8(OPCODE_NEGATE, 1);
         machine_test(chunk, &[Value::number(10.0)], &[Value::number(-10.0)], &[])
+    }
+
+    #[test]
+    fn operation_not() -> MachineResult<()> {
+        let make_chunk = || {
+            let mut chunk = Chunk::new();
+            chunk.write_u8(OPCODE_NOT, 0);
+            chunk
+        };
+        machine_test(
+            make_chunk(),
+            &[Value::Bool(true)],
+            &[Value::Bool(false)],
+            &[],
+        )?;
+        machine_test(
+            make_chunk(),
+            &[Value::Bool(false)],
+            &[Value::Bool(true)],
+            &[],
+        )
     }
 
     #[test]
