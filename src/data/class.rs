@@ -1,6 +1,6 @@
 use std::{cell::RefCell, collections::HashMap, fmt::Display, rc::Rc};
 
-use crate::Value;
+use crate::{Closure, Value};
 
 #[derive(Debug)]
 pub struct Class {
@@ -16,6 +16,11 @@ impl Class {
         }
     }
 
+    pub fn get_method(&self, name: &Rc<String>) -> Option<Value> {
+        // TODO: replace with try_borrow
+        self.methods.borrow().get(name).cloned()
+    }
+
     pub fn add_method(&self, name: Rc<String>, value: Value) {
         // TODO: replace with try_borrow_mut
         self.methods.borrow_mut().insert(name, value);
@@ -25,6 +30,24 @@ impl Class {
 impl Display for Class {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "<class {}>", self.name)
+    }
+}
+
+#[derive(Debug)]
+pub struct BoundMethod {
+    receiver: Value,
+    method: Rc<Closure>,
+}
+
+impl BoundMethod {
+    pub fn new(receiver: Value, method: Rc<Closure>) -> Self {
+        Self { receiver, method }
+    }
+}
+
+impl Display for BoundMethod {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "<bound {} for {}>", self.method, self.receiver)
     }
 }
 
@@ -40,6 +63,10 @@ impl Instance {
             class,
             fields: Default::default(),
         }
+    }
+
+    pub fn class(&self) -> Rc<Class> {
+        self.class.clone()
     }
 
     pub fn get_field(&self, name: Rc<String>) -> Option<Value> {

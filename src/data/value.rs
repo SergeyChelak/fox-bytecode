@@ -1,6 +1,6 @@
 use std::{fmt::Display, num::ParseFloatError, rc::Rc};
 
-use crate::{Class, Closure, Func, Instance, NativeFn, NativeFunc};
+use crate::{BoundMethod, Class, Closure, Func, Instance, NativeFn, NativeFunc};
 
 pub type Double = f32;
 
@@ -15,6 +15,7 @@ pub enum Value {
     Closure(Rc<Closure>),
     Class(Rc<Class>),
     Instance(Rc<Instance>),
+    BoundMethod(Rc<BoundMethod>),
 }
 
 impl Default for Value {
@@ -33,6 +34,7 @@ impl PartialEq for Value {
             (Self::NativeFun(l), Self::NativeFun(r)) => Rc::ptr_eq(l, r),
             (Self::Closure(l), Self::Closure(r)) => Rc::ptr_eq(l, r),
             (Self::Class(l), Self::Class(r)) => Rc::ptr_eq(l, r),
+            (Self::BoundMethod(l), Self::BoundMethod(r)) => Rc::ptr_eq(l, r),
             _ => false,
         }
     }
@@ -47,14 +49,20 @@ impl Display for Value {
             Value::Text(val) => write!(f, "{val}"),
             Value::Fun(val) => write!(f, "{val}"),
             Value::NativeFun(val) => write!(f, "{val}"),
-            Value::Closure(val) => write!(f, "{}", val.func()),
+            Value::Closure(val) => write!(f, "{val}"),
             Value::Class(val) => write!(f, "{val}"),
             Value::Instance(val) => write!(f, "{val}"),
+            Value::BoundMethod(val) => write!(f, "{val}"),
         }
     }
 }
 
 impl Value {
+    pub fn bound(method: BoundMethod) -> Self {
+        let method_ref = Rc::new(method);
+        Value::BoundMethod(method_ref)
+    }
+
     pub fn native_func(func: NativeFn) -> Self {
         Value::NativeFun(Rc::new(NativeFunc::with(func)))
     }
@@ -115,6 +123,13 @@ impl Value {
     pub fn as_class(&self) -> Option<Rc<Class>> {
         match self {
             Value::Class(value) => Some(value.clone()),
+            _ => None,
+        }
+    }
+
+    pub fn as_closure(&self) -> Option<Rc<Closure>> {
+        match self {
+            Value::Closure(value) => Some(value.clone()),
             _ => None,
         }
     }

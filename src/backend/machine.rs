@@ -326,13 +326,28 @@ impl Machine {
             .as_instance()
             .ok_or(MachineError::with_str("Only instances have fields"))?;
         let name = self.read_const_string(index)?;
-        let Some(value) = instance.get_field(name.clone()) else {
+        if let Some(value) = instance.get_field(name.clone()) {
+            _ = self.stack_pop()?; // instance
+            self.stack_push(value)?;
+            return Ok(());
+        };
+
+        self.bind_method(instance.class(), name)
+    }
+
+    fn bind_method(&mut self, class: Rc<Class>, name: Rc<String>) -> MachineResult<()> {
+        let Some(method) = class.get_method(&name) else {
             let msg = format!("Undefined property '{name}'");
             return Err(MachineError::with_str(&msg));
         };
-
-        _ = self.stack_pop()?; // instance
-        self.stack_push(value)
+        let closure = method.as_closure().ok_or(MachineError::with_str(
+            "Bug: expected closure in bind_method",
+        ))?;
+        let receiver = self.stack_peek()?;
+        let bound = BoundMethod::new(receiver, closure);
+        let bound_value = Value::bound(bound);
+        _ = self.stack_pop()?;
+        self.stack_push(bound_value)
     }
 
     fn set_class_property(&mut self, index: u8) -> MachineResult<()> {

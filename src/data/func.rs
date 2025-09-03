@@ -11,6 +11,12 @@ pub struct Closure {
     upvalues: Vec<Shared<Upvalue>>,
 }
 
+impl Display for Closure {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "<closure {}>", self.func())
+    }
+}
+
 impl Debug for Closure {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Closure")

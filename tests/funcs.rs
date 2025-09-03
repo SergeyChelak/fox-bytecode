@@ -11,7 +11,7 @@ fn func_declaration_test() {
         print areWeHavingItYet;
     "#;
     let probe = interpret_using_probe(src);
-    let output = &["<fn areWeHavingItYet>"];
+    let output = &["<closure <fn areWeHavingItYet>>"];
     assert_eq!(None, probe.borrow().top_error_message());
     probe.borrow().assert_output_match(output);
 }
