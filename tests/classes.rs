@@ -239,3 +239,21 @@ fn class_initializer_invalid_implicit_test() {
         probe.borrow().top_error_message()
     );
 }
+
+#[test]
+fn class_initializer_return_misuse_test() {
+    let src = r#"
+        class Class {
+          init() {
+            return "ready";
+          }
+        }
+
+        Class();
+    "#;
+    let probe = interpret_using_probe(src);
+    assert_eq!(
+        Some("Can't return a value from an initializer"),
+        probe.borrow().top_error_message()
+    );
+}

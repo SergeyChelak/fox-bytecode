@@ -785,6 +785,9 @@ impl Assembler {
         if self.is_match(TokenType::Semicolon) {
             self.emit_return();
         } else {
+            if matches!(self.compiler().func_type(), FuncType::Initializer) {
+                self.error("Can't return a value from an initializer");
+            }
             self.expression();
             self.consume(TokenType::Semicolon, "Expect ';' after return value");
             self.emit_instruction(&Instruction::Return);
