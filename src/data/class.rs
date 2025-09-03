@@ -5,11 +5,20 @@ use crate::Value;
 #[derive(Debug)]
 pub struct Class {
     name: Rc<String>,
+    methods: RefCell<HashMap<Rc<String>, Value>>,
 }
 
 impl Class {
     pub fn new(name: Rc<String>) -> Self {
-        Self { name }
+        Self {
+            name,
+            methods: Default::default(),
+        }
+    }
+
+    pub fn add_method(&self, name: Rc<String>, value: Value) {
+        // TODO: replace with try_borrow_mut
+        self.methods.borrow_mut().insert(name, value);
     }
 }
 
@@ -34,10 +43,12 @@ impl Instance {
     }
 
     pub fn get_field(&self, name: Rc<String>) -> Option<Value> {
+        // TODO: replace with try_borrow
         self.fields.borrow().get(&name).cloned()
     }
 
     pub fn set_field(&self, name: Rc<String>, v: Value) {
+        // TODO: replace with try_borrow_mut
         self.fields.borrow_mut().insert(name, v);
     }
 }

@@ -111,6 +111,13 @@ impl Value {
             _ => None,
         }
     }
+
+    pub fn as_class(&self) -> Option<Rc<Class>> {
+        match self {
+            Value::Class(value) => Some(value.clone()),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Debug, PartialEq)]

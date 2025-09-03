@@ -310,7 +310,14 @@ impl Machine {
     }
 
     fn define_method(&mut self, name: Rc<String>) -> MachineResult<()> {
-        todo!()
+        let method = self.stack_peek()?;
+        let class = self
+            .stack_peek_at(1)?
+            .as_class()
+            .ok_or(MachineError::with_str("Bug: method on non-class object"))?;
+        class.add_method(name, method);
+        self.stack_pop()?;
+        Ok(())
     }
 
     fn get_class_property(&mut self, index: u8) -> MachineResult<()> {
