@@ -14,7 +14,6 @@ use crate::{
 
 const FRAMES_MAX: usize = 64;
 const STACK_MAX_SIZE: usize = FRAMES_MAX * UINT8_COUNT;
-const INITIALIZER_METHOD_NAME: &str = "init";
 
 pub struct Machine {
     frames: Vec<CallFrame>,

@@ -244,7 +244,7 @@ impl Local {
 
     fn reserved(func_type: FuncType) -> Self {
         let name = match func_type {
-            FuncType::Method => "this",
+            FuncType::Method | FuncType::Initializer => "this",
             _ => "",
         };
 

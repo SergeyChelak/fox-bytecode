@@ -166,13 +166,12 @@ fn class_initializer_test() {
     probe.borrow().assert_output_match(output);
 }
 
-// #[test]
-fn _class_initializer_with_args_test() {
+#[test]
+fn class_initializer_with_args_test() {
     let src = r#"
         class Class {
           init(a) {
             this.value = a;
-            // return this;
           }
         }
 

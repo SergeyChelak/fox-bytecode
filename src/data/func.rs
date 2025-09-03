@@ -86,6 +86,7 @@ impl Display for Func {
 
 #[derive(Debug, Clone, Copy)]
 pub enum FuncType {
+    Initializer,
     Script,
     Function,
     Method,

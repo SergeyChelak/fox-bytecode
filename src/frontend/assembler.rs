@@ -1,7 +1,7 @@
 use std::rc::Rc;
 
 use crate::{
-    ErrorInfo, Func, FuncType, Instruction, MAX_FUNCTION_ARGUMENTS, Value,
+    ErrorInfo, Func, FuncType, INITIALIZER_METHOD_NAME, Instruction, MAX_FUNCTION_ARGUMENTS, Value,
     frontend::{
         Token, TokenType,
         compiler::{Compiler, Local},
@@ -503,7 +503,11 @@ impl Assembler {
         self.consume(TokenType::Identifier, "Expect method name");
         let idx = self.identifier_constant(self.prev_token_owned());
 
-        let func_type = FuncType::Method;
+        let func_type = if self.previous.text == INITIALIZER_METHOD_NAME {
+            FuncType::Initializer
+        } else {
+            FuncType::Method
+        };
         self.function(func_type);
 
         self.emit_instruction(&Instruction::Method(idx));
@@ -807,7 +811,11 @@ impl Assembler {
     }
 
     fn emit_return(&mut self) -> usize {
-        self.emit_instruction(&Instruction::Nil);
+        let instruction = match self.compiler().func_type() {
+            FuncType::Initializer => Instruction::GetLocal(0),
+            _ => Instruction::Nil,
+        };
+        self.emit_instruction(&instruction);
         self.emit_instruction(&Instruction::Return)
     }
 
