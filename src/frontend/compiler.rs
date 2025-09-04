@@ -27,8 +27,8 @@ impl Compiler {
         }
     }
 
-    pub fn assign_name(&mut self, name: &str) {
-        self.func.name = Some(name.to_string());
+    pub fn assign_name(&mut self, name: String) {
+        self.func.name = Some(name);
     }
 
     pub fn func_type(&self) -> &FuncType {
@@ -149,9 +149,9 @@ impl Compiler {
         false
     }
 
-    pub fn resolve_local(&self, token: &Token) -> Option<LocalData> {
+    pub fn resolve_local(&self, name: &str) -> Option<LocalData> {
         for (i, local) in self.locals.iter().enumerate().rev() {
-            if local.name == token.text {
+            if local.name == name {
                 let info = LocalData {
                     index: i as u8,
                     depth: local.depth,
@@ -162,12 +162,12 @@ impl Compiler {
         None
     }
 
-    pub fn resolve_upvalue(&mut self, token: &Token) -> UpvalueResolve {
+    pub fn resolve_upvalue(&mut self, name: &str) -> UpvalueResolve {
         let Some(enclosing) = self.enclosing.as_mut() else {
             return UpvalueResolve::NotFound;
         };
 
-        if let Some(local) = enclosing.resolve_local(token) {
+        if let Some(local) = enclosing.resolve_local(name) {
             let index = local.index;
             enclosing
                 .locals
@@ -177,7 +177,7 @@ impl Compiler {
             return self.add_upvalue(index, true).into();
         }
 
-        match enclosing.resolve_upvalue(token) {
+        match enclosing.resolve_upvalue(name) {
             UpvalueResolve::Index(upvalue) => self.add_upvalue(upvalue, false).into(),
             any => any,
         }

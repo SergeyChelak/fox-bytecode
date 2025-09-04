@@ -38,6 +38,7 @@ pub const OPCODE_SET_PROPERTY: u8 = 32;
 pub const OPCODE_METHOD: u8 = 33;
 pub const OPCODE_INVOKE: u8 = 34;
 pub const OPCODE_INHERIT: u8 = 35;
+pub const OPCODE_GET_SUPER: u8 = 36;
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Instruction {
@@ -77,6 +78,7 @@ pub enum Instruction {
     Method(u8),
     Invoke(u8, u8),
     Inherit,
+    GetSuper(u8),
 }
 
 impl Instruction {
@@ -149,6 +151,7 @@ impl Instruction {
             Instruction::Method(val) => vec![OPCODE_METHOD, *val],
             Instruction::Invoke(name, args) => vec![OPCODE_INVOKE, *name, *args],
             Instruction::Inherit => vec![OPCODE_INHERIT],
+            Instruction::GetSuper(val) => vec![OPCODE_GET_SUPER, *val],
         }
     }
 
@@ -258,6 +261,10 @@ impl Instruction {
                 Ok(Instruction::Invoke(name, args))
             }
             OPCODE_INHERIT => Ok(Instruction::Inherit),
+            OPCODE_GET_SUPER => {
+                let arg = consume_byte(buffer, offset).ok_or(FetchError::Broken)?;
+                Ok(Instruction::GetSuper(arg))
+            }
             x => Err(FetchError::Unknown(x)),
         }
     }
@@ -321,6 +328,7 @@ mod tests {
             ([OPCODE_GET_PROPERTY, 76], Instruction::GetProperty(76)),
             ([OPCODE_SET_PROPERTY, 63], Instruction::SetProperty(63)),
             ([OPCODE_METHOD, 153], Instruction::Method(153)),
+            ([OPCODE_GET_SUPER, 184], Instruction::GetSuper(184)),
         ];
         for (inp, exp) in data.iter() {
             let mut offset = 0;

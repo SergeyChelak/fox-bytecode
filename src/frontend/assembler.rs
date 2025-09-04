@@ -144,7 +144,7 @@ impl Assembler {
     fn init_compiler(&mut self, func_type: FuncType) {
         let mut compiler = Compiler::with(func_type, self.compiler.take());
         if !matches!(func_type, FuncType::Script) {
-            compiler.assign_name(self.prev_token_text());
+            compiler.assign_name(self.prev_token_name());
         }
         self.compiler = Some(Box::new(compiler));
     }
@@ -251,6 +251,7 @@ impl Assembler {
             Or => ParseRule::new(None, Some(Self::or), Precedence::Or),
             Dot => ParseRule::new(None, Some(Self::dot), Precedence::Call),
             This => ParseRule::new(Some(Self::this), None, Precedence::None),
+            Super => ParseRule::new(Some(Self::super_keyword), None, Precedence::None),
             _ => Default::default(),
         }
     }
@@ -308,7 +309,7 @@ impl Assembler {
 
     fn dot(&mut self, can_assign: bool) {
         self.consume(TokenType::Identifier, "Expect property name after '.'");
-        let name = self.identifier_constant(self.previous.clone());
+        let name = self.identifier_constant(self.prev_token_name());
 
         if can_assign && self.is_match(TokenType::Equal) {
             self.expression();
@@ -338,7 +339,8 @@ impl Assembler {
     fn number(&mut self, _can_assign: bool) {
         // I don't like this approach
         // according to strtod it returns 0.0 as fallback
-        let value = Value::number_from(self.prev_token_text()).unwrap_or(Value::Number(0.0));
+        let text = &self.previous.text;
+        let value = Value::number_from(text).unwrap_or(Value::Number(0.0));
         self.emit_constant(value);
     }
 
@@ -354,9 +356,31 @@ impl Assembler {
     }
 
     fn string(&mut self, _can_assign: bool) {
-        let s = self.prev_token_text();
+        let s = &self.previous.text;
         let text = &s[1..s.len() - 1];
         self.emit_constant(Value::text_from_str(text));
+    }
+
+    fn super_keyword(&mut self, _can_assign: bool) {
+        if self.class_compilers.is_empty() {
+            self.error("Can't use 'super' outside of a class");
+        } else if !self
+            .class_compilers
+            .last()
+            .map(|x| x.has_super_class)
+            .unwrap_or_default()
+        {
+            self.error("Can't use 'super' in a class with no superclass");
+        }
+
+        self.consume(TokenType::Dot, "Expect '.' after 'super'");
+        self.consume(TokenType::Identifier, "Expect superclass method name");
+        let name = self.identifier_constant(self.prev_token_name());
+
+        self.named_variable("this", false);
+        self.named_variable("super", false);
+
+        self.emit_instruction(&Instruction::GetSuper(name));
     }
 
     fn this(&mut self, _can_assign: bool) {
@@ -381,11 +405,11 @@ impl Assembler {
     }
 
     fn variable(&mut self, can_assign: bool) {
-        self.named_variable(self.prev_token_owned(), can_assign);
+        self.named_variable(&self.prev_token_owned().text, can_assign);
     }
 
-    fn named_variable(&mut self, token: Token, can_assign: bool) {
-        let (getter, setter) = if let Some(info) = self.compiler().resolve_local(&token) {
+    fn named_variable(&mut self, name: &str, can_assign: bool) {
+        let (getter, setter) = if let Some(info) = self.compiler().resolve_local(name) {
             if info.depth.is_none() {
                 self.error("Can't read local variable in its own initializer");
             }
@@ -393,13 +417,13 @@ impl Assembler {
                 Instruction::GetLocal(info.index),
                 Instruction::SetLocal(info.index),
             )
-        } else if let Some(index) = self.resolve_upvalue(&token) {
+        } else if let Some(index) = self.resolve_upvalue(name) {
             (
                 Instruction::GetUpvalue(index),
                 Instruction::SetUpvalue(index),
             )
         } else {
-            let idx = self.identifier_constant(token);
+            let idx = self.identifier_constant(name.to_string());
             (Instruction::GetGlobal(idx), Instruction::SetGlobal(idx))
         };
         if can_assign && self.is_match(TokenType::Equal) {
@@ -410,8 +434,8 @@ impl Assembler {
         }
     }
 
-    fn resolve_upvalue(&mut self, token: &Token) -> Option<u8> {
-        match self.compiler_mut().resolve_upvalue(token) {
+    fn resolve_upvalue(&mut self, name: &str) -> Option<u8> {
+        match self.compiler_mut().resolve_upvalue(name) {
             super::compiler::UpvalueResolve::NotFound => None,
             super::compiler::UpvalueResolve::Index(index) => Some(index),
             super::compiler::UpvalueResolve::Error(err) => {
@@ -446,7 +470,7 @@ impl Assembler {
         if self.compiler().is_local_scope() {
             return 0;
         }
-        self.identifier_constant(self.prev_token_owned())
+        self.identifier_constant(self.prev_token_name())
     }
 
     fn declare_variable(&mut self) {
@@ -477,8 +501,8 @@ impl Assembler {
         self.emit_instruction(&Instruction::DefineGlobal(global));
     }
 
-    fn identifier_constant(&mut self, token: Token) -> u8 {
-        self.make_constant(Value::text_from_string(token.text))
+    fn identifier_constant(&mut self, name: String) -> u8 {
+        self.make_constant(Value::text_from_string(name))
     }
 }
 
@@ -487,7 +511,7 @@ impl Assembler {
     fn class_declaration(&mut self) {
         self.consume(TokenType::Identifier, "Expect class name");
         let class_name = self.prev_token_owned();
-        let idx = self.identifier_constant(self.prev_token_owned());
+        let idx = self.identifier_constant(self.prev_token_name());
         self.declare_variable();
 
         self.emit_instruction(&Instruction::Class(idx));
@@ -507,7 +531,7 @@ impl Assembler {
             self.add_local("super".to_string());
             self.define_variable(0);
 
-            self.named_variable(class_name.clone(), false);
+            self.named_variable(&class_name.text.clone(), false);
             self.emit_instruction(&Instruction::Inherit);
 
             if let Some(current) = self.class_compilers.last_mut() {
@@ -515,7 +539,7 @@ impl Assembler {
             }
         }
 
-        self.named_variable(class_name, false);
+        self.named_variable(&class_name.text, false);
         self.consume(TokenType::LeftBrace, "Expect '{' before class body");
         while !self.check(TokenType::RightBrace) && !self.check(TokenType::Eof) {
             self.method();
@@ -537,7 +561,7 @@ impl Assembler {
 
     fn method(&mut self) {
         self.consume(TokenType::Identifier, "Expect method name");
-        let idx = self.identifier_constant(self.prev_token_owned());
+        let idx = self.identifier_constant(self.prev_token_name());
 
         let func_type = if self.previous.text == INITIALIZER_METHOD_NAME {
             FuncType::Initializer
@@ -947,8 +971,8 @@ impl Assembler {
         self.previous.clone()
     }
 
-    fn prev_token_text(&self) -> &str {
-        &self.previous.text
+    fn prev_token_name(&self) -> String {
+        self.previous.text.clone()
     }
 
     fn set_current(&mut self, token: Token) {

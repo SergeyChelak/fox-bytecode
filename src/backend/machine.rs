@@ -112,6 +112,7 @@ impl Machine {
                 Instruction::Method(index) => self.op_method(index)?,
                 Instruction::Invoke(name, arg_count) => self.op_invoke(name, arg_count)?,
                 Instruction::Inherit => self.op_inherit()?,
+                Instruction::GetSuper(index) => self.op_get_super(index)?,
             }
         }
         Ok(())
@@ -357,6 +358,16 @@ impl Machine {
 
 /// Classes
 impl Machine {
+    fn op_get_super(&mut self, index: u8) -> MachineResult<()> {
+        let name = self.read_const_string(index)?;
+        let super_class = self
+            .stack_pop()?
+            .as_class()
+            .ok_or(MachineError::with_str("Superclass must be a class"))?;
+
+        self.bind_method(super_class, name)
+    }
+
     fn op_inherit(&mut self) -> MachineResult<()> {
         let super_class = self
             .stack_peek_at(1)?
