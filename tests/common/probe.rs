@@ -29,6 +29,7 @@ impl Probe {
         None
     }
 
+    #[allow(dead_code)]
     pub fn assert_output_match<T: AsRef<str>>(&self, output: &[T]) {
         self.backend.assert_output_match(output)
     }

@@ -37,6 +37,7 @@ pub const OPCODE_GET_PROPERTY: u8 = 31;
 pub const OPCODE_SET_PROPERTY: u8 = 32;
 pub const OPCODE_METHOD: u8 = 33;
 pub const OPCODE_INVOKE: u8 = 34;
+pub const OPCODE_INHERIT: u8 = 35;
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Instruction {
@@ -75,6 +76,7 @@ pub enum Instruction {
     SetProperty(u8),
     Method(u8),
     Invoke(u8, u8),
+    Inherit,
 }
 
 impl Instruction {
@@ -146,6 +148,7 @@ impl Instruction {
             Instruction::SetProperty(val) => vec![OPCODE_SET_PROPERTY, *val],
             Instruction::Method(val) => vec![OPCODE_METHOD, *val],
             Instruction::Invoke(name, args) => vec![OPCODE_INVOKE, *name, *args],
+            Instruction::Inherit => vec![OPCODE_INHERIT],
         }
     }
 
@@ -254,6 +257,7 @@ impl Instruction {
                 let args = consume_byte(buffer, offset).ok_or(FetchError::Broken)?;
                 Ok(Instruction::Invoke(name, args))
             }
+            OPCODE_INHERIT => Ok(Instruction::Inherit),
             x => Err(FetchError::Unknown(x)),
         }
     }
@@ -289,6 +293,7 @@ mod tests {
             (OPCODE_EQUAL, Instruction::Equal),
             (OPCODE_DUPLICATE, Instruction::Duplicate),
             (OPCODE_CLOSE_UPVALUE, Instruction::CloseUpvalue),
+            (OPCODE_INHERIT, Instruction::Inherit),
         ];
         let buffer = data.iter().map(|(opcode, _)| *opcode).collect::<Vec<_>>();
         let mut offset = 0;

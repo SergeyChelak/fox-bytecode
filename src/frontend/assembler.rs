@@ -12,7 +12,11 @@ use crate::{
 };
 
 type ParseRule = super::rule::ParseRule<Assembler>;
-type ClassCompiler = ();
+
+#[derive(Debug, Default)]
+struct ClassCompiler {
+    has_super_class: bool,
+}
 
 pub struct Assembler {
     current: Token,
@@ -453,15 +457,15 @@ impl Assembler {
         if self.compiler().has_declared_variable(&token) {
             self.error("Already a variable with this name in this scope");
         }
-        self.add_local(token);
+        self.add_local(token.text);
     }
 
-    fn add_local(&mut self, token: Token) {
+    fn add_local(&mut self, name: String) {
         if !self.compiler().has_capacity() {
             self.error("Too many local variables in function");
             return;
         }
-        let local = Local::with_name(token.text);
+        let local = Local::with_name(name);
         self.compiler_mut().push_local(local);
     }
 
@@ -489,7 +493,27 @@ impl Assembler {
         self.emit_instruction(&Instruction::Class(idx));
         self.define_variable(idx);
 
-        self.class_compilers.push(());
+        self.class_compilers.push(ClassCompiler::default());
+
+        if self.is_match(TokenType::Colon) {
+            self.consume(TokenType::Identifier, "Expect superclass name");
+            self.variable(false);
+
+            if class_name.text == self.previous.text {
+                self.error("A class can't inherit from itself");
+            }
+
+            self.begin_scope();
+            self.add_local("super".to_string());
+            self.define_variable(0);
+
+            self.named_variable(class_name.clone(), false);
+            self.emit_instruction(&Instruction::Inherit);
+
+            if let Some(current) = self.class_compilers.last_mut() {
+                current.has_super_class = true;
+            }
+        }
 
         self.named_variable(class_name, false);
         self.consume(TokenType::LeftBrace, "Expect '{' before class body");
@@ -498,6 +522,15 @@ impl Assembler {
         }
         self.consume(TokenType::RightBrace, "Expect '}' after class body");
         self.emit_instruction(&Instruction::Pop);
+
+        if self
+            .class_compilers
+            .last()
+            .map(|x| x.has_super_class)
+            .unwrap_or_default()
+        {
+            self.end_scope();
+        }
 
         self.class_compilers.pop();
     }

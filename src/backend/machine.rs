@@ -111,6 +111,7 @@ impl Machine {
                 Instruction::SetProperty(index) => self.set_class_property(index)?,
                 Instruction::Method(index) => self.op_method(index)?,
                 Instruction::Invoke(name, arg_count) => self.op_invoke(name, arg_count)?,
+                Instruction::Inherit => self.op_inherit()?,
             }
         }
         Ok(())
@@ -356,6 +357,19 @@ impl Machine {
 
 /// Classes
 impl Machine {
+    fn op_inherit(&mut self) -> MachineResult<()> {
+        let super_class = self
+            .stack_peek_at(1)?
+            .as_class()
+            .ok_or(MachineError::with_str("Superclass must be a class"))?;
+        let class = self.stack_peek()?.as_class().ok_or(MachineError::with_str(
+            "Bug: method on non-class object (inherit)",
+        ))?;
+        class.inherit_methods(&super_class);
+        self.stack_pop()?;
+        Ok(())
+    }
+
     fn op_class(&mut self, index: u8) -> MachineResult<()> {
         let name = self.read_const_string(index)?;
         let class = Class::new(name.clone());

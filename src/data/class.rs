@@ -16,6 +16,12 @@ impl Class {
         }
     }
 
+    pub fn inherit_methods(&self, parent: &Class) {
+        // TODO: replace with try_borrow_mut
+        assert!(self.methods.borrow().is_empty());
+        *self.methods.borrow_mut() = parent.methods.borrow().clone();
+    }
+
     pub fn get_method(&self, name: &Rc<String>) -> Option<Value> {
         // TODO: replace with try_borrow
         self.methods.borrow().get(name).cloned()
