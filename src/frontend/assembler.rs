@@ -378,9 +378,15 @@ impl Assembler {
         let name = self.identifier_constant(self.prev_token_name());
 
         self.named_variable("this", false);
-        self.named_variable("super", false);
-
-        self.emit_instruction(&Instruction::GetSuper(name));
+        let var_super = "super";
+        if self.is_match(TokenType::LeftParenthesis) {
+            let args = self.argument_list();
+            self.named_variable(var_super, false);
+            self.emit_instruction(&Instruction::SuperInvoke(name, args as u8));
+        } else {
+            self.named_variable(var_super, false);
+            self.emit_instruction(&Instruction::GetSuper(name));
+        }
     }
 
     fn this(&mut self, _can_assign: bool) {

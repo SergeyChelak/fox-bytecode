@@ -113,6 +113,9 @@ impl Machine {
                 Instruction::Invoke(name, arg_count) => self.op_invoke(name, arg_count)?,
                 Instruction::Inherit => self.op_inherit()?,
                 Instruction::GetSuper(index) => self.op_get_super(index)?,
+                Instruction::SuperInvoke(name, arg_count) => {
+                    self.op_super_invoke(name, arg_count)?
+                }
             }
         }
         Ok(())
@@ -213,10 +216,10 @@ impl Machine {
             return self.call_value(value, arg_count);
         }
 
-        self.invoke_class(instance.class(), method, arg_count)
+        self.invoke_from_class(instance.class(), method, arg_count)
     }
 
-    fn invoke_class(
+    fn invoke_from_class(
         &mut self,
         class: Rc<Class>,
         name: Rc<String>,
@@ -358,6 +361,15 @@ impl Machine {
 
 /// Classes
 impl Machine {
+    fn op_super_invoke(&mut self, name: u8, arg_count: u8) -> MachineResult<()> {
+        let method = self.read_const_string(name)?;
+        let super_class = self
+            .stack_pop()?
+            .as_class()
+            .ok_or(MachineError::with_str("Superclass must be a class"))?;
+        self.invoke_from_class(super_class, method, arg_count as usize)
+    }
+
     fn op_get_super(&mut self, index: u8) -> MachineResult<()> {
         let name = self.read_const_string(index)?;
         let super_class = self
